@@ -3,7 +3,7 @@
   "version": "1.0.120",
   "type": "module",
   "description": "MCP plugin that saves 98% of your context window. Works with Claude Code, Gemini CLI, VS Code Copilot, OpenCode, and Codex CLI. Sandboxed code execution, FTS5 knowledge base, and intent-driven search.",
-  "author": "Mert Koseoğlu",
+  "author": "Mert Koseo\u011flu",
   "license": "Elastic-2.0",
   "keywords": [
     "mcp",
@@ -42,7 +42,7 @@
   },
   "omp": {
     "name": "context-mode",
-    "description": "Save 98% of your context window in OMP — sandboxed code execution, FTS5 search, hard-block curl/wget, session continuity across compaction.",
+    "description": "Save 98% of your context window in OMP \u2014 sandboxed code execution, FTS5 search, hard-block curl/wget, session continuity across compaction.",
     "hooks": "./build/adapters/omp/plugin.js"
   },
   "bugs": "https://github.com/mksglu/context-mode/issues",
@@ -98,6 +98,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "benchmark": "npx tsx tests/benchmark.ts",
+    "benchmark:memory-governor": "npx tsx benchmarks/memory-governor.ts",
     "test:use-cases": "npx tsx tests/use-cases.ts",
     "test:compare": "npx tsx tests/context-comparison.ts",
     "test:ecosystem": "npx tsx tests/ecosystem-benchmark.ts",
@@ -109,6 +110,8 @@
     "@mixmark-io/domino": "^2.2.0",
     "@modelcontextprotocol/sdk": "^1.26.0",
     "better-sqlite3": "^12.6.2",
+    "dotenv": "^8.2.0",
+    "node-fetch": "^3.3.2",
     "picocolors": "^1.1.1",
     "turndown": "^7.2.0",
     "turndown-plugin-gfm": "^1.0.2",
