@@ -1406,12 +1406,23 @@ export function extractSnippet(
 
 export type BatchQueryScope = "batch" | "global";
 
+// The batch-scope tip is identical on every non-global ctx_batch_execute call,
+// so it is emitted once per server process (the first non-global batch) instead
+// of repeated on every call. resetBatchFooterState() restores the initial state
+// so tests are deterministic under vitest's shared fork pool.
+let batchScopeTipShown = false;
+
+export function resetBatchFooterState(): void {
+  batchScopeTipShown = false;
+}
+
 export function formatBatchQueryResults(
   store: ContentStore,
   queries: string[],
   source: string,
   maxOutput = 80 * 1024,
   scope: BatchQueryScope = "batch",
+  stats?: { anyMiss: boolean },
 ): string[] {
   const sections: string[] = [];
   let outputSize = 0;
@@ -1442,13 +1453,15 @@ export function formatBatchQueryResults(
       continue;
     }
 
+    if (stats) stats.anyMiss = true;
     sections.push("No matching sections found.");
     sections.push("");
   }
 
   if (scope === "global") {
     sections.push(`\n> **Scope:** Queries searched the entire persistent index (query_scope: "global").`);
-  } else {
+  } else if (!batchScopeTipShown) {
+    batchScopeTipShown = true;
     sections.push(`\n> **Tip:** Results are scoped to this batch only. To search across all indexed sources, use \`ctx_search(queries: [...])\` or call ctx_batch_execute with \`query_scope: "global"\`.`);
   }
 
@@ -4085,14 +4098,18 @@ async ({
 
       const inventory = formatBatchSectionInventory(plan.chunks, indexed.totalChunks);
 
+      // Run all search queries. Track misses so follow-up terms are emitted
+      // only when they can help reformulate a query.
+      const batchStats = { anyMiss: false };
       const queryResults = formatBatchQueryResults(
         store,
         queries,
         source,
         undefined,
         query_scope,
+        batchStats,
       );
-      const distinctiveTerms = store.getDistinctiveTerms
+      const distinctiveTerms = batchStats.anyMiss && store.getDistinctiveTerms
         ? store.getDistinctiveTerms(indexed.sourceId)
         : [];
 
