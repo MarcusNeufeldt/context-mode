@@ -2152,33 +2152,37 @@ describe("AbortSignal cancellation (process tree + temp cleanup)", () => {
     return best?.dir ?? null;
   }
 
-  test("abort kills the entire shell tree (child + grandchild) and cleans the .ctx-mode temp dir", async () => {
+  test("abort kills the entire process tree (child + grandchild) and cleans the .ctx-mode temp dir", async () => {
     const scratch = mkdtempSync(join(tmpdir(), "ctx-abort-test-"));
     const marker = join(scratch, "marker");
     process.env[MARKER_ENV] = marker;
-    process.env.__CM_ABORT_NODE = process.execPath;
-    // Child code is passed through the environment (eval'd inside node) to
-    // avoid shell-quoting collisions; the child spawns the grandchild and
-    // reports both REAL OS PIDs to the marker.
-    process.env.__CM_ABORT_CHILD_CODE = [
-      "const cp = require('child_process');",
-      "const fs = require('fs');",
-      "const g = cp.spawn(process.execPath, ['-e', 'setTimeout(() => {}, 120000)']);",
-      "fs.writeFileSync(process.env.__CM_ABORT_TEST_MARKER, JSON.stringify({ child: process.pid, grand: g.pid }));",
-      "setTimeout(() => {}, 120000);",
-    ].join("\n");
     const pids: number[] = [];
     let sandboxTmp = "";
     try {
       const controller = new AbortController();
       const promise = executor.execute({
-        language: "shell",
-        // Tree: bash (spawned root) -> node child -> node grandchild.
-        code: `"$__CM_ABORT_NODE" -e "eval(process.env.__CM_ABORT_CHILD_CODE)"`,
+        language: "javascript",
+        // Tree: spawned node root -> node child -> node grandchild.
+        code: [
+          "const cp = require('child_process');",
+          "const fs = require('fs');",
+          "const child = cp.spawn(process.execPath, ['-e', 'setTimeout(() => {}, 120000)']);",
+          "child.on('error', (err) => { console.error(err); process.exitCode = 1; });",
+          "fs.writeFileSync(process.env.__CM_ABORT_TEST_MARKER, JSON.stringify({ child: process.pid, grand: child.pid }));",
+          "setTimeout(() => {}, 120000);",
+        ].join("\n"),
         signal: controller.signal,
       });
 
-      await waitFor(() => existsSync(marker), 10_000, "process tree to spawn");
+      const earlyResult = await Promise.race([
+        waitFor(() => existsSync(marker), 10_000, "process tree to spawn").then(() => null),
+        promise,
+      ]);
+      assert.equal(
+        earlyResult,
+        null,
+        `execution exited before the process tree spawned: ${JSON.stringify(earlyResult)}`,
+      );
       const info = JSON.parse(readFileSync(marker, "utf-8"));
       pids.push(info.child, info.grand);
       sandboxTmp = findSandboxDir() ?? "";
@@ -2201,7 +2205,7 @@ describe("AbortSignal cancellation (process tree + temp cleanup)", () => {
       );
 
       assert.equal(result.timedOut, false, "abort must not be reported as timeout");
-      assert.notEqual(result.exitCode, 0, "aborted shell must exit non-zero");
+      assert.notEqual(result.exitCode, 0, "aborted execution must exit non-zero");
       for (const pid of pids) {
         await waitDead(pid);
         assert.equal(isAlive(pid), false, `PID ${pid} survived abort — orphaned process`);
@@ -2213,8 +2217,6 @@ describe("AbortSignal cancellation (process tree + temp cleanup)", () => {
       );
     } finally {
       delete process.env[MARKER_ENV];
-      delete process.env.__CM_ABORT_NODE;
-      delete process.env.__CM_ABORT_CHILD_CODE;
       for (const pid of pids) {
         try { process.kill(pid, "SIGKILL"); } catch { /* already dead */ }
       }
@@ -2229,11 +2231,11 @@ describe("AbortSignal cancellation (process tree + temp cleanup)", () => {
     try {
       const controller = new AbortController();
       const promise = executor.execute({
-        language: "shell",
+        language: "javascript",
         code: [
-          `echo running > "$${MARKER_ENV}"`,
-          `# CANARY_SECRET_9f2e41 must never appear in the sidecar`,
-          `sleep 120`,
+          `require("fs").writeFileSync(process.env.${MARKER_ENV}, "running");`,
+          `// CANARY_SECRET_9f2e41 must never appear in the sidecar`,
+          `setTimeout(() => {}, 120000);`,
         ].join("\n"),
         signal: controller.signal,
       });
@@ -2253,7 +2255,7 @@ describe("AbortSignal cancellation (process tree + temp cleanup)", () => {
         "ownership.json must expose exactly the metadata-only schema",
       );
       assert.equal(manifest.version, 1);
-      assert.equal(manifest.language, "shell");
+      assert.equal(manifest.language, "javascript");
       assert.equal(manifest.executorPid, process.pid);
       assert.match(manifest.nonce, /^[0-9a-f]{32}$/);
       assert.match(manifest.scriptSha256, /^[0-9a-f]{64}$/);
@@ -2307,14 +2309,14 @@ describe("AbortSignal cancellation (process tree + temp cleanup)", () => {
     try {
       const controller = new AbortController();
       const abortable = executor.execute({
-        language: "shell",
-        code: `echo running > "$${MARKER_ENV}"\nsleep 120`,
+        language: "javascript",
+        code: `require("fs").writeFileSync(process.env.${MARKER_ENV}, "running");\nsetTimeout(() => {}, 120000);`,
         signal: controller.signal,
       });
       // Concurrent execution with NO signal — must run to completion untouched.
       const concurrent = executor.execute({
-        language: "shell",
-        code: "sleep 1 && echo done",
+        language: "javascript",
+        code: "await new Promise(resolve => setTimeout(resolve, 1000)); console.log('done');",
       });
 
       await waitFor(() => existsSync(marker), 10_000, "marker file");

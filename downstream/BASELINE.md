@@ -112,3 +112,30 @@ passed, indicating an unlocked build-input/reproducibility issue rather than a
 source failure. Those generated-only changes were removed after measurement.
 
 The active global context-mode installation was not changed.
+
+## One-time integration baseline
+
+Recorded after Marcus authorized a runtime/Codex import:
+
+- Branch: `downstream/integration-runtime-codex-2026-07-31`
+- Base: `downstream/stable@742d377`
+- Open upstream PRs reviewed: 62
+- PRs imported with `-x`: 29
+- PRs held: 3
+- PRs skipped: 30
+- Weekly automation: none
+- Remote publication: deferred
+
+Final focused verification:
+
+- 17 files passed; 760 tests passed; 11 skipped
+- request cancellation: 6 passed
+- conflict-sensitive server cases: 11 passed
+- typecheck, build, six bundle assertions, and asymmetric-drift: passed
+- real Codex stdio MCP smoke: passed
+
+The complete serialized Windows run recorded 4,755 passes, 34 failed
+assertions, and 62 skips before two integration test-contract corrections.
+Both exact corrected tests then passed. The remaining 32 failures match the
+original Windows baseline categories. Full details, including the actual smoke
+metrics, are in `downstream/IMPORT-2026-07-31.md`.

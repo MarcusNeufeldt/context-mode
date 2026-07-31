@@ -186,6 +186,32 @@ describe("#chunkMarkdown byte cap (#878)", () => {
     assert.ok(sizes.length >= 2, `expected the CJK paragraph to split, got ${sizes.length} chunk(s)`);
   });
 
+  test("a long emoji Markdown paragraph stays capped without broken surrogates", () => {
+    const dbPath = tmpDbPath("markdown-emoji");
+    const store = new ContentStore(dbPath);
+    store.index({
+      content: `# Synthetic emoji\n\n${"🎉".repeat(MAX_CHUNK_BYTES)}`,
+      source: "markdown-emoji",
+    });
+    store.close();
+
+    const sizes = assertAllChunksCapped(dbPath);
+    assert.ok(sizes.length >= 2, `expected the emoji paragraph to split, got ${sizes.length} chunk(s)`);
+
+    const Database = loadDatabase();
+    const db = new Database(dbPath, { readonly: true });
+    try {
+      const chunks = db.prepare("SELECT content FROM chunks").all() as Array<{ content: string }>;
+      for (const chunk of chunks) {
+        assert.equal(chunk.content.includes("\uFFFD"), false, "chunk contains a replacement character");
+        assert.doesNotMatch(chunk.content, /[\uD800-\uDBFF]$/, "chunk ends with a dangling high surrogate");
+        assert.doesNotMatch(chunk.content, /^[\uDC00-\uDFFF]/, "chunk starts with a dangling low surrogate");
+      }
+    } finally {
+      db.close();
+    }
+  });
+
   test("ctx_batch_execute-style heading wrapper cannot persist a 1.2MB chunk", () => {
     const dbPath = tmpDbPath("markdown-batch");
     const store = new ContentStore(dbPath);

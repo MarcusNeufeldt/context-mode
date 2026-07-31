@@ -24,13 +24,17 @@ go to `origin` over SSH.
 
 ## Current phase
 
-Bootstrap only:
+Bootstrap plus one-time runtime/Codex integration:
 
 - existing GitHub fork reused;
 - local checkout created;
 - upstream history synchronized locally;
 - downstream branch and maintenance records established;
-- baseline build and test verification recorded.
+- baseline build and test verification recorded;
+- all 62 open upstream PRs reviewed;
+- 29 runtime/Codex PRs imported with provenance on
+  `downstream/integration-runtime-codex-2026-07-31`;
+- combined source built and exercised through a real Codex stdio MCP smoke.
 
 The incident-relevant store/search/SQLite/batch test baseline is green. The
 complete upstream suite is not green on this Windows host; its known baseline
@@ -38,17 +42,20 @@ failures are recorded rather than silently waived.
 
 Not part of this phase:
 
-- no upstream pull requests imported;
 - no weekly patch train;
 - no scheduled automation;
 - no replacement of the active global context-mode installation;
-- no package publication.
+- no package publication;
+- no remote push while the SSH YubiKey is unavailable.
 
 ## Records
 
 - [Baseline](BASELINE.md)
 - [Decision register](DECISIONS.md)
 - [Work log](WORKLOG.md)
+- [Complete PR review](PR-REVIEW-2026-07-31.md)
+- [Runtime/Codex import ledger](IMPORT-2026-07-31.md)
+- [Real MCP smoke harness](smoke/mcp-runtime-smoke.mjs)
 
 ## License
 

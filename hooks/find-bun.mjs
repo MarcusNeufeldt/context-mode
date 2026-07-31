@@ -1,7 +1,7 @@
 // Resolve a bun binary from the known install locations and $PATH.
 // Raw JS (not runtime.ts) so start.mjs can use it before build/ exists.
 // Pure/injectable for tests.
-import { join } from "node:path";
+import { posix, win32 } from "node:path";
 import { existsSync as realExistsSync } from "node:fs";
 import { homedir as realHomedir } from "node:os";
 
@@ -13,6 +13,7 @@ export function findBun({
 } = {}) {
   const exe = platform === "win32" ? "bun.exe" : "bun";
   const delimiter = platform === "win32" ? ";" : ":";
+  const join = platform === "win32" ? win32.join : posix.join;
   const candidates = [
     env.BUN_INSTALL ? join(env.BUN_INSTALL, "bin", exe) : null,
     home ? join(home, ".bun", "bin", exe) : null,

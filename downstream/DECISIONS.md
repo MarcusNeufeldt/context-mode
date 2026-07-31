@@ -27,10 +27,12 @@ Use `downstream/stable` for approved downstream changes and
 ## D-004: No patch train yet
 
 - Date: 2026-07-31
-- Status: accepted
+- Status: partially superseded by D-009
 
-Do not cherry-pick upstream pull requests and do not create weekly automation
-during bootstrap. Candidate selection and cadence require a separate decision.
+Do not create weekly automation during bootstrap. The original prohibition on
+cherry-picking was superseded when Marcus explicitly authorized the one-time
+runtime/Codex import in D-009. Candidate cadence still requires a separate
+decision.
 
 ## D-005: Keep the live installation isolated
 
@@ -69,3 +71,59 @@ as a comparison baseline. Require a clean incident-relevant subset covering
 store, search, SQLite, session DB, server EOF, and `ctx_batch_execute` for
 future candidate work. Do not fix the upstream-wide Windows failures during
 bootstrap.
+
+## D-009: Run one documented runtime/Codex import
+
+- Date: 2026-07-31
+- Status: accepted
+
+Review every currently open upstream pull request, import useful runtime and
+Codex changes onto a temporary downstream integration branch, and record an
+explicit disposition for every PR. This is a one-time pass, not the weekly
+patch train.
+
+## D-010: Cherry-pick logical commits only
+
+- Date: 2026-07-31
+- Status: accepted
+
+Use `git cherry-pick -x` for logical PR commits. Do not import merge commits
+that merely synchronize a contributor branch with `next`, and do not carry
+unrelated CI-stat commits.
+
+## D-011: Source is authoritative during bundle conflicts
+
+- Date: 2026-07-31
+- Status: accepted
+
+Resolve TypeScript/JavaScript source interactions explicitly. Do not hand-merge
+minified bundles from several PRs; regenerate all shipped bundles once from the
+final combined source and require bundle assertions to pass.
+
+## D-012: Hold unsafe retention and automatic DB swapping
+
+- Date: 2026-07-31
+- Status: accepted
+
+Do not import #970 until session liveness is proven independently of main DB
+mtime under WAL mode. Do not import #871 until automatic file replacement has
+a safe multi-process coordination contract and recoverability evidence.
+
+## D-013: Prove the fork through real Codex stdio
+
+- Date: 2026-07-31
+- Status: accepted
+
+In addition to unit/integration tests, launch the built bundle over MCP stdio
+with `CONTEXT_MODE_PLATFORM=codex`, isolated temporary storage, and an
+oversized real command result. Require the ingestion cap, bounded response,
+search retrieval, and stats call to succeed.
+
+## D-014: Keep publication and installation separate from integration
+
+- Date: 2026-07-31
+- Status: accepted
+
+The integration branch may be completed and committed locally while the
+YubiKey is unavailable. Do not push it, publish a package, or replace the
+active global installation as part of this import pass.

@@ -14,8 +14,10 @@ downstream fork. Upstream contributor guidance in `CLAUDE.md` and
 
 ## Current phase
 
-- Bootstrap and document the fork.
-- Do not import or cherry-pick upstream pull requests yet.
+- Maintain the documented bootstrap and one-time runtime/Codex integration.
+- The 2026-07-31 import set is recorded in
+  `downstream/IMPORT-2026-07-31.md`. Do not add another PR outside that set
+  without a new explicit review decision.
 - Do not add a scheduled or weekly patch workflow yet.
 - Do not install this checkout over the active global context-mode package
   without explicit authorization.
@@ -37,7 +39,7 @@ that are not needed to reproduce the work.
 
 - Fetch from `upstream`; never push to it.
 - Push downstream changes only to `origin` using SSH.
-- Use `git cherry-pick -x` when a future upstream PR is explicitly approved.
+- Use `git cherry-pick -x` when an upstream PR is explicitly approved.
 - Rebuild generated bundles whenever source changes require it.
 - Run typecheck, build assertions, targeted tests, and Windows-specific
   regression tests before promoting candidate code to `downstream/stable`.

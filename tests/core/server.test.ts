@@ -1192,7 +1192,17 @@ describe("ctx_index: projectRoot path resolution (#365)", () => {
       const searchText = searchResp?.result?.content?.[0]?.text ?? "";
       expect(searchText).toContain(fallbackMarker);
     } finally {
-      try { proc.kill("SIGTERM"); } catch { /* best effort */ }
+      if (proc.exitCode === null) {
+        const exited = new Promise<void>((resolveExit) => {
+          const timer = setTimeout(resolveExit, 5_000);
+          proc.once("exit", () => {
+            clearTimeout(timer);
+            resolveExit();
+          });
+        });
+        try { proc.kill("SIGTERM"); } catch { /* best effort */ }
+        await exited;
+      }
       rmSync(fallbackCwd, { recursive: true, force: true });
     }
   }, 30_000);
@@ -2393,9 +2403,12 @@ describe("ctx_purge is the sole reset/wipe mechanism", () => {
     );
     expect(purgeMatch).not.toBeNull();
     const purgeBody = purgeMatch![0];
-    // 1. Closes the FTS5 knowledge base BEFORE wiping (releases Windows lock)
-    expect(purgeBody).toContain("_store.cleanup()");
-    expect(purgeBody).toContain("_store = null");
+    // 1. Closes the path-scoped FTS5 store BEFORE wiping (releases Windows
+    // lock) and removes it from the per-database singleton map (#888).
+    expect(purgeBody).toContain("_stores.get(storePathForPurge)");
+    expect(purgeBody).toContain("store.cleanup()");
+    expect(purgeBody).toContain("_stores.delete(storePathForPurge)");
+    expect(purgeBody).toContain("_stores.clear()");
     // 2. Delegates the on-disk wipe to the purgeSession deep module so all
     //    file-kind sweeps (session DB, events.md, cleanup flag, FTS5 store,
     //    legacy content) flow through ONE code path with uniform dual-hash.
@@ -2403,6 +2416,9 @@ describe("ctx_purge is the sole reset/wipe mechanism", () => {
     expect(purgeBody).toContain("projectDir: getProjectDir()");
     expect(purgeBody).toContain("sessionsDir: getSessionDir()");
     expect(purgeBody).toContain("storePath: storePathForPurge");
+    expect(purgeBody.indexOf("store.cleanup()")).toBeLessThan(
+      purgeBody.indexOf("purgeSession({"),
+    );
     // 3. Resets in-memory stats
     expect(purgeBody).toContain("sessionStats.calls = {}");
     expect(purgeBody).toContain("sessionStats.sessionStart = Date.now()");

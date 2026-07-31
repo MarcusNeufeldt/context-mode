@@ -314,18 +314,19 @@ describe("ContextModePlugin", () => {
         const projectDir = join(tempDir, "issue-621-search-coerce");
         const plugin = await createTestPlugin(projectDir);
         // ctx_search also uses z.preprocess(coerceJsonArray, …) on queries.
-        // Empty knowledge base is fine — we only assert the call returns
-        // without a TypeError (the original symptom).
-        const result = await plugin.tool!.ctx_search.execute(
-          {
-            queries: JSON.stringify(["issue621-search"]) as unknown as string[],
-          },
-          baseCtx(projectDir),
+        // A correctly isolated empty project returns the normal empty-KB
+        // error. Reaching that handler error proves coercion succeeded; the
+        // original regression failed earlier with a schema/TypeError.
+        await expect(
+          plugin.tool!.ctx_search.execute(
+            {
+              queries: JSON.stringify(["issue621-search"]) as unknown as string[],
+            },
+            baseCtx(projectDir),
+          ),
+        ).rejects.toThrow(
+          /Knowledge base is empty/,
         );
-        const output = typeof result === "string" ? result : result.output;
-        // Should not throw; output is a normal search response (possibly
-        // "No results" / guidance) but never the JS TypeError symptom.
-        expect(typeof output).toBe("string");
       });
 
       // ─────────────────────────────────────────────────────────
@@ -346,20 +347,19 @@ describe("ContextModePlugin", () => {
         // Reporter's exact call shape: queries arrives as JSON string AND
         // limit arrives as a number-string. v1.0.140's plain z.number()
         // rejects "4" with "Expected number, received string".
-        const result = await plugin.tool!.ctx_search.execute(
-          {
-            queries: JSON.stringify([
-              "HTML file mermaid rendering flowchart display issue",
-            ]) as unknown as string[],
-            limit: "4" as unknown as number,
-          },
-          baseCtx(projectDir),
+        await expect(
+          plugin.tool!.ctx_search.execute(
+            {
+              queries: JSON.stringify([
+                "HTML file mermaid rendering flowchart display issue",
+              ]) as unknown as string[],
+              limit: "4" as unknown as number,
+            },
+            baseCtx(projectDir),
+          ),
+        ).rejects.toThrow(
+          /Knowledge base is empty/,
         );
-        const output = typeof result === "string" ? result : result.output;
-        // Should NOT throw — z.coerce.number() turns "4" into 4 before
-        // the handler sees it; queries coercion turns the JSON string
-        // into an array. Output is a normal "no results yet" guidance.
-        expect(typeof output).toBe("string");
       });
 
       it("ctx_search lifts bare-string queries into single-element array (#627)", async () => {
@@ -368,14 +368,16 @@ describe("ContextModePlugin", () => {
         // Some LLM providers send a single query as a bare string rather
         // than a JSON-stringified array. Without widening, coerceJsonArray
         // returns the string unchanged → z.array(z.string()) rejects it.
-        const result = await plugin.tool!.ctx_search.execute(
-          {
-            queries: "single bare query" as unknown as string[],
-          },
-          baseCtx(projectDir),
+        await expect(
+          plugin.tool!.ctx_search.execute(
+            {
+              queries: "single bare query" as unknown as string[],
+            },
+            baseCtx(projectDir),
+          ),
+        ).rejects.toThrow(
+          /Knowledge base is empty/,
         );
-        const output = typeof result === "string" ? result : result.output;
-        expect(typeof output).toBe("string");
       });
 
       it("ctx_execute accepts stringified background boolean (#627)", async () => {
