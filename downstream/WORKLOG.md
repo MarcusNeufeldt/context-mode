@@ -303,3 +303,32 @@ Afterward, verify that:
 - Confirmed neither `downstream/stable` nor
   `downstream/integration-runtime-codex-2026-07-31` exists remotely.
 - Therefore no remote repository state changed during this import pass.
+
+### 09:08 - Live Codex MCP cutover
+
+- Marcus explicitly authorized wiring the local fork into Codex as the active
+  `context-mode` MCP server.
+- Confirmed the integration worktree was clean at
+  `0a57e28e55d2ae267faaba5a09911ff2707cdd1b`.
+- Ran the local `cli.bundle.mjs doctor --platform codex`:
+  - server initialization passed;
+  - native SQLite/FTS5 passed;
+  - the Codex binary and all six configured hooks passed.
+- Preserved the pre-cutover Codex configuration at
+  `C:\Users\marcu\.codex\config.toml.bak-context-mode-local-20260731-0908`.
+- Changed only `mcp_servers.context-mode.args` in
+  `C:\Users\marcu\.codex\config.toml`, from the global npm
+  `cli.bundle.mjs` to
+  `F:/explore/context_mode_fork/cli.bundle.mjs`.
+- Kept `CONTEXT_MODE_PLATFORM=codex`, the existing hook configuration, and the
+  existing context-mode storage paths unchanged.
+- `codex mcp get context-mode --json` resolved the new local stdio path.
+- Launched a fresh ephemeral, read-only Codex host. It started and completed
+  `context-mode/ctx_stats` and returned `FORK_MCP_OK`.
+- Verified the ephemeral host's local `node` MCP child exited after its parent
+  closed; no test-owned fork process remained.
+- The current already-running Codex task retains its pre-cutover MCP child
+  until restarted. New Codex tasks load the fork immediately.
+- The global npm package remains installed as a rollback runtime. No package
+  was published, no database was reset, no remote branch was changed, and no
+  weekly automation was added.

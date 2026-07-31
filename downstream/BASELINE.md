@@ -46,15 +46,22 @@ The fork's existing non-default branches were preserved:
 
 ## Installed-runtime boundary
 
-The active machine-wide Codex integration remains the separate global npm
-installation. This checkout is not linked to or installed over that runtime.
-Local dependency installation, build, and tests do not authorize a global
-install or `ctx upgrade`.
+As of 2026-07-31 09:08 +02:00, the Codex `context-mode` MCP registration
+launches `F:/explore/context_mode_fork/cli.bundle.mjs` directly. This is a
+configuration-only cutover: the checkout was not npm-linked or installed over
+the global package, and the existing context-mode storage and Codex hook
+configuration were not changed.
+
+The global npm package remains installed at version `1.0.169` as the rollback
+runtime. The pre-cutover Codex configuration is preserved at
+`C:\Users\marcu\.codex\config.toml.bak-context-mode-local-20260731-0908`.
+Already-running Codex tasks retain their existing MCP child until restarted;
+new Codex processes load the fork.
 
 ## Phase boundary
 
-No upstream pull request has been imported. No maintenance schedule or patch
-automation exists.
+The documented one-time runtime/Codex import is complete. No maintenance
+schedule or patch automation exists.
 
 The local fork baseline is complete. Remote `origin/main` and
 `origin/downstream/stable` have not yet been updated; the exact resume commands
@@ -140,3 +147,14 @@ assertions, and 62 skips before two integration test-contract corrections.
 Both exact corrected tests then passed. The remaining 32 failures match the
 original Windows baseline categories. Full details, including the actual smoke
 metrics, are in `downstream/IMPORT-2026-07-31.md`.
+
+## Live Codex MCP cutover verification
+
+- Local `cli.bundle.mjs doctor --platform codex`: passed server initialization,
+  Codex hooks, native SQLite/FTS5, and plugin registration checks.
+- `codex mcp get context-mode --json`: resolved the stdio command to this
+  checkout's `cli.bundle.mjs` with `CONTEXT_MODE_PLATFORM=codex`.
+- Fresh ephemeral read-only `codex exec`: started and completed
+  `context-mode/ctx_stats`, then returned `FORK_MCP_OK`.
+- Active storage paths remain under
+  `C:\Users\marcu\.codex\context-mode`; no database was copied or reset.

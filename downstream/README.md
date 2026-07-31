@@ -24,7 +24,7 @@ go to `origin` over SSH.
 
 ## Current phase
 
-Bootstrap plus one-time runtime/Codex integration:
+Bootstrap, one-time runtime/Codex integration, and local live MCP cutover:
 
 - existing GitHub fork reused;
 - local checkout created;
@@ -34,7 +34,11 @@ Bootstrap plus one-time runtime/Codex integration:
 - all 62 open upstream PRs reviewed;
 - 29 runtime/Codex PRs imported with provenance on
   `downstream/integration-runtime-codex-2026-07-31`;
-- combined source built and exercised through a real Codex stdio MCP smoke.
+- combined source built and exercised through a real Codex stdio MCP smoke;
+- the Codex `context-mode` MCP registration now launches this checkout's
+  `cli.bundle.mjs`;
+- a fresh ephemeral Codex host loaded the registration and completed
+  `ctx_stats`.
 
 The incident-relevant store/search/SQLite/batch test baseline is green. The
 complete upstream suite is not green on this Windows host; its known baseline
@@ -44,7 +48,7 @@ Not part of this phase:
 
 - no weekly patch train;
 - no scheduled automation;
-- no replacement of the active global context-mode installation;
+- no npm link or overwrite of the retained global npm rollback package;
 - no package publication;
 - no remote push while the SSH YubiKey is unavailable.
 

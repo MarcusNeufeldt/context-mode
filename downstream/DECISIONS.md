@@ -127,3 +127,14 @@ search retrieval, and stats call to succeed.
 The integration branch may be completed and committed locally while the
 YubiKey is unavailable. Do not push it, publish a package, or replace the
 active global installation as part of this import pass.
+
+## D-015: Cut Codex MCP over by direct local registration
+
+- Date: 2026-07-31
+- Status: accepted
+
+After explicit authorization, point only the Codex `context-mode` MCP command
+at this checkout's built `cli.bundle.mjs`. Keep the global npm package installed
+and preserve the prior Codex config as rollback evidence. Do not npm-link,
+publish, reset storage, or rewrite hook configuration as part of the cutover.
+Require both a local doctor pass and a fresh Codex-hosted MCP tool call.
