@@ -39,13 +39,6 @@ Times are UTC.
 - Re-read the current upstream contributor guidance after the fast-forward.
 - Confirmed package version `1.0.169` and compatible local Node/pnpm versions.
 
-### Pending in this bootstrap
-
-- Commit the downstream documentation.
-- Fast-forward `origin/main`.
-- Push `downstream/stable`.
-- Verify both remote branches through the GitHub broker.
-
 ### 06:00 - Dependency installation
 
 - `pnpm install --frozen-lockfile` failed before mutation because the repository
@@ -83,3 +76,57 @@ Times are UTC.
 - Restored only the two build-generated bundle changes.
 - Removed three 4-byte untracked test temp files.
 - Confirmed the remaining worktree changes are downstream documentation only.
+
+### 06:10 - Initial downstream commit
+
+- Configured repository-local Git author identity as
+  `MarcusNeufeldt <86715671+MarcusNeufeldt@users.noreply.github.com>`.
+- Did not modify the global Git identity.
+- Committed the initial downstream documentation as
+  `084504b` (`docs: initialize downstream fork`).
+
+### 06:12 - Remote publication deferred
+
+- Reconfirmed that remote `origin/main` is an ancestor of local `main`, so the
+  planned update remains fast-forward-only.
+- Started an SSH push using Windows OpenSSH and the configured hardware-backed
+  key.
+- The first non-interactive attempt waited silently for hardware presence. It
+  was stopped by terminating only the verified `git push origin main:main`
+  process and its SSH child.
+- Retried interactively. OpenSSH displayed the expected security-key presence
+  prompt, then authentication ended with `signing failed ... invalid format`
+  because the key could not be touched at that time.
+- Ran the `yubikey-watch` health check. The watcher, audit configuration, and
+  current log were healthy, and the request was attributed to this exact
+  `git push origin main:main`.
+- Marcus confirmed that the hardware key is not currently reachable.
+- No remote branch was changed. No further authentication attempt was made.
+
+### Publication resume commands
+
+Run from this repository when the YubiKey is reachable:
+
+```powershell
+$previousGitSsh = $env:GIT_SSH
+try {
+    $env:GIT_SSH = "C:\Windows\System32\OpenSSH\ssh.exe"
+    git push origin main:main
+    git push --set-upstream origin downstream/stable
+} finally {
+    $env:GIT_SSH = $previousGitSsh
+}
+```
+
+Afterward, verify that:
+
+- `origin/main` resolves to
+  `252e74b7a947b5fbb5624037f8710d3a5319af3c`;
+- `origin/downstream/stable` resolves to the local downstream branch;
+- both remote branches are visible through the GitHub broker.
+
+### Remaining bootstrap publication work
+
+- Fast-forward `origin/main`.
+- Push `downstream/stable`.
+- Verify both remote branches through the GitHub broker.

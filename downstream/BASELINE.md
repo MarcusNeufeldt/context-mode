@@ -24,6 +24,8 @@ Recorded: 2026-07-31
 - Fork-only commits on old `main`: `0`
 - Upstream commits ahead of old fork `main`: `1106`
 - Local downstream branch: `downstream/stable`
+- Initial downstream documentation commit: `084504b`
+- Remote publication: deferred until the SSH YubiKey is reachable
 
 The fork's existing non-default branches were preserved:
 
@@ -53,6 +55,10 @@ install or `ctx upgrade`.
 
 No upstream pull request has been imported. No maintenance schedule or patch
 automation exists.
+
+The local fork baseline is complete. Remote `origin/main` and
+`origin/downstream/stable` have not yet been updated; the exact resume commands
+and authentication attempt are recorded in `downstream/WORKLOG.md`.
 
 ## Dependency baseline
 
