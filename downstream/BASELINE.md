@@ -119,6 +119,7 @@ Recorded after Marcus authorized a runtime/Codex import:
 
 - Branch: `downstream/integration-runtime-codex-2026-07-31`
 - Base: `downstream/stable@742d377`
+- Integration hardening commit: `030f295`
 - Open upstream PRs reviewed: 62
 - PRs imported with `-x`: 29
 - PRs held: 3

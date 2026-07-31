@@ -282,10 +282,16 @@ Afterward, verify that:
 - Conflict-sensitive server cases:
   - 11 tests passed across the focused runs.
 
-### Remaining integration work
+### 06:56 - Local integration closeout
 
-- Commit the downstream hardening, regenerated bundles, smoke harness, and
-  documentation.
+- Committed the downstream hardening, regenerated bundles, smoke harness, and
+  complete import documentation as
+  `030f295` (`fix: harden runtime and Codex integration`).
+- Confirmed the integration implementation is fully local and no GitHub branch
+  was changed.
+
+### Remaining publication boundary
+
 - Do not push until Marcus can use the SSH YubiKey.
 - Do not install this branch over the active global context-mode runtime
   without a separate live-cutover decision.
