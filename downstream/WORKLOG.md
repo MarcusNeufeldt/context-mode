@@ -295,3 +295,11 @@ Afterward, verify that:
 - Do not push until Marcus can use the SSH YubiKey.
 - Do not install this branch over the active global context-mode runtime
   without a separate live-cutover decision.
+
+### 06:57 - Final remote verification
+
+- Queried `MarcusNeufeldt/context-mode` branches through the GitHub broker.
+- Confirmed remote `main` remains at `1854ea5221`.
+- Confirmed neither `downstream/stable` nor
+  `downstream/integration-runtime-codex-2026-07-31` exists remotely.
+- Therefore no remote repository state changed during this import pass.
