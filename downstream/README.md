@@ -44,11 +44,11 @@ The incident-relevant store/search/SQLite/batch test baseline is green. The
 complete upstream suite is not green on this Windows host; its known baseline
 failures are recorded rather than silently waived.
 
-An explicitly authorized follow-up candidate is being maintained on
-`downstream/integration-runtime-observability-2026-08-13`. It adds the reviewed
+The 2026-08-13 follow-up was promoted by fast-forward to `downstream/stable`.
+It adds the reviewed
 upstream SQLite I/O retry from #1030, opt-in payload-free MCP request lifecycle
 diagnostics, and the Pi bridge-only cancellation portion of #1029. It does not
-replace the active July runtime until separately verified and authorized.
+change `main`, which remains the clean upstream mirror.
 
 Not part of this phase:
 

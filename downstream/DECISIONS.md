@@ -172,3 +172,14 @@ Build and verify the follow-up on
 `downstream/integration-runtime-observability-2026-08-13`. Do not push, promote
 to `downstream/stable`, change Codex/Pi configuration, restart services, or open
 an active database without a separate authorization after evidence is reviewed.
+
+## D-019: Promote the verified candidate to downstream stable
+
+- Date: 2026-08-13
+- Status: accepted
+
+Fast-forward `downstream/stable` to the verified observability candidate and use
+`downstream/stable` as this checkout's steady-state branch. Keep `main` as the
+clean upstream mirror and preserve the dated integration branches as historical
+provenance. Point Codex, Pi, and Claude at this checkout's stable built runtime;
+retain the global npm package only as rollback.

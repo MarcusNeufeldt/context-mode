@@ -188,3 +188,15 @@ Candidate verification:
 - built Codex doctor, native SQLite/FTS5, and hook checks: passed
 - full upstream Windows suite: not rerun; the 2026-07-31 baseline remains the
   comparison point for the known shell/symlink failures
+
+## 2026-08-13 stable promotion and host registration
+
+- `downstream/stable` fast-forward target: `ae2fc6d`
+- Promotion type: fast-forward from `742d377`; no merge commit and no divergence
+- Steady-state checkout: `downstream/stable`
+- `main`: unchanged clean upstream mirror
+- Codex registration: direct local `cli.bundle.mjs` from this checkout
+- Pi registration: verified against the same checkout/runtime path
+- Claude registration: verified against the same checkout/runtime path
+- Global npm `context-mode@1.0.169`: retained as rollback, not selected by the
+  three verified host registrations

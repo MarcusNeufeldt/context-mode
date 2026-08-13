@@ -400,3 +400,17 @@ Afterward, verify that:
 - Structured `autoreview --mode local`: blocked before model review because the
   required TruffleHog binary is not installed; no bypass or installation was
   attempted. An independent read-only code-review lane was used instead.
+
+### Stable promotion and unified host cutover
+
+- Marcus authorized checkout cleanup, stable promotion, and aligning Codex,
+  Pi, and Claude to the correct checkout.
+- Verified `downstream/stable@742d377` was a strict ancestor of the completed
+  candidate with `0` commits unique to stable and `42` commits unique to the
+  candidate.
+- Recorded a fast-forward promotion to the final maintenance commit; no merge
+  commit, rebase, branch deletion, or `main` modification was used.
+- Kept the dated integration branches for provenance and selected
+  `downstream/stable` as the steady-state checked-out branch.
+- Verified each host's actual registration and fresh MCP behavior after the
+  cutover; exact commands and outcomes follow in the final session report.
