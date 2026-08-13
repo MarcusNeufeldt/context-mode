@@ -158,3 +158,33 @@ metrics, are in `downstream/IMPORT-2026-07-31.md`.
   `context-mode/ctx_stats`, then returned `FORK_MCP_OK`.
 - Active storage paths remain under
   `C:\Users\marcu\.codex\context-mode`; no database was copied or reset.
+
+## 2026-08-13 follow-up candidate baseline
+
+- Branch: `downstream/integration-runtime-observability-2026-08-13`
+- Base: `downstream/integration-runtime-codex-2026-07-31@c1a8649`
+- Upstream #1030 commit: `eaad703`, cherry-picked with `-x` as `7ad74a7`
+- Upstream #1029: not cherry-picked; only the Pi bridge cancellation delta was
+  ported because the PR duplicates the existing #1009 core cancellation work
+- Request diagnostics: opt-in with `CONTEXT_MODE_REQUEST_LOG=1`, stderr only,
+  payload-free, and disabled by default
+- Remote publication: not authorized and not attempted
+- Active Codex/Pi runtime cutover: not authorized and not attempted
+
+The follow-up is motivated by the 2026-08-12 Pi Hub incident in which a decoded
+MCP tool request never produced a result and the client could not recover the
+turn. The diagnostics distinguish transport receipt, handler entry, terminal
+success, terminal error, and cancellation without logging arguments, output,
+paths, request ids, or exception text. They diagnose but do not themselves
+recover a wedged request.
+
+Candidate verification:
+
+- typecheck and build: passed
+- six bundle assertions and asymmetric-drift assertion: passed
+- focused lifecycle/Pi/store/server/executor lane: passed
+- existing 9 MiB Codex stdio MCP smoke: passed
+- opt-in request-log stdio redaction smoke: passed
+- built Codex doctor, native SQLite/FTS5, and hook checks: passed
+- full upstream Windows suite: not rerun; the 2026-07-31 baseline remains the
+  comparison point for the known shell/symlink failures

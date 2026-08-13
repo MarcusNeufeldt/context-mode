@@ -206,6 +206,124 @@ let _lastMcpActivity = Date.now();
 /** In-flight tool-call count — the reaper never fires while this is > 0. */
 let _inFlight = 0;
 
+const REQUEST_LOG_ENV = "CONTEXT_MODE_REQUEST_LOG";
+const REQUEST_LOG_MAX_PENDING = 1_024;
+let _requestLogSequence = 0;
+const _requestLogIds = new Map<string, string>();
+
+type RequestLogWriter = (chunk: string) => void;
+
+function requestLogEnabled(): boolean {
+  return process.env[REQUEST_LOG_ENV] === "1";
+}
+
+function requestLogKey(value: unknown): string | null {
+  if (typeof value === "number") return `number:${String(value)}`;
+  if (typeof value === "string" && value.length <= 128) return `string:${value}`;
+  return null;
+}
+
+function requestLogTool(value: unknown): string {
+  return typeof value === "string" && /^ctx_[a-z0-9_]{1,64}$/.test(value)
+    ? value
+    : "[unknown]";
+}
+
+function requestLogId(rawId: unknown): string {
+  const key = requestLogKey(rawId);
+  if (key) {
+    const existing = _requestLogIds.get(key);
+    if (existing) return existing;
+  }
+  const id = `req-${String(++_requestLogSequence).padStart(6, "0")}`;
+  if (key) {
+    if (_requestLogIds.size >= REQUEST_LOG_MAX_PENDING) {
+      const oldest = _requestLogIds.keys().next().value;
+      if (oldest !== undefined) _requestLogIds.delete(oldest);
+    }
+    _requestLogIds.set(key, id);
+  }
+  return id;
+}
+
+function emitRequestLog(
+  event: { phase: string; request: string; tool: string; duration_ms?: number; outcome?: string },
+  write: RequestLogWriter = (chunk) => { process.stderr.write(chunk); },
+): void {
+  if (!requestLogEnabled()) return;
+  try {
+    write(`[context-mode/request] ${JSON.stringify(event)}\n`);
+  } catch { /* diagnostics must never break MCP dispatch */ }
+}
+
+/**
+ * Opt-in, payload-free MCP request diagnostics. Only JSON-RPC id and tool name
+ * are inspected; arguments, metadata, results, paths, and error text are never
+ * serialized. The raw id is mapped to a short process-local correlation id.
+ */
+export function traceInboundMcpRequest(
+  message: unknown,
+  write?: RequestLogWriter,
+): void {
+  if (!requestLogEnabled() || !message || typeof message !== "object") return;
+  const value = message as { id?: unknown; method?: unknown; params?: { name?: unknown } };
+  if (value.method !== "tools/call") return;
+  emitRequestLog({
+    phase: "received",
+    request: requestLogId(value.id),
+    tool: requestLogTool(value.params?.name),
+  }, write);
+}
+
+export interface ToolRequestTrace {
+  request: string;
+  requestKey: string | null;
+  tool: string;
+  startedAt: number;
+}
+
+/** Start handler-level tracing for a registered ctx_* tool. */
+export function traceToolRequestStart(
+  tool: string,
+  rawRequestId: unknown,
+  write?: RequestLogWriter,
+  now: () => number = Date.now,
+): ToolRequestTrace | null {
+  if (!requestLogEnabled()) return null;
+  const trace = {
+    request: requestLogId(rawRequestId),
+    requestKey: requestLogKey(rawRequestId),
+    tool: requestLogTool(tool),
+    startedAt: now(),
+  };
+  emitRequestLog({ phase: "handler_start", request: trace.request, tool: trace.tool }, write);
+  return trace;
+}
+
+/** Finish handler-level tracing without logging results or exception details. */
+export function traceToolRequestEnd(
+  trace: ToolRequestTrace | null,
+  outcome: "ok" | "error" | "cancelled",
+  write?: RequestLogWriter,
+  now: () => number = Date.now,
+): void {
+  if (!trace) return;
+  emitRequestLog({
+    phase: outcome === "ok" ? "handler_end" : "handler_error",
+    request: trace.request,
+    tool: trace.tool,
+    duration_ms: Math.max(0, Math.round(now() - trace.startedAt)),
+    ...(outcome === "ok" ? {} : { outcome }),
+  }, write);
+  if (trace.requestKey) _requestLogIds.delete(trace.requestKey);
+}
+
+/** Test-only reset for deterministic correlation ids and pending-map state. */
+export function __resetRequestLogForTests(): void {
+  _requestLogSequence = 0;
+  _requestLogIds.clear();
+}
+
 /**
  * #854: record MCP activity (inbound message or response). The server calls this
  * so the bridge-child idle reaper in {@link startLifecycleGuard} can distinguish
@@ -245,6 +363,7 @@ export function attachMcpActivityTap(
   if (!prev) return;
   transport.onmessage = (message: unknown, extra?: unknown) => {
     try { noteMcpActivity(); } catch { /* never break message dispatch */ }
+    try { traceInboundMcpRequest(message); } catch { /* never break message dispatch */ }
     return prev(message, extra);
   };
 }

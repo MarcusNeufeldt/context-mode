@@ -5,13 +5,26 @@
  * and triggers shutdown. Uses injectable check function for testability.
  */
 
-import { describe, test, assert } from "vitest";
+import { afterEach, describe, test, assert } from "vitest";
 import { spawn, execSync } from "node:child_process";
 import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { pathToFileURL } from "node:url";
-import { startLifecycleGuard, makeDefaultIsParentAlive, bridgeChildIdleTimeoutMs, noteMcpActivity, noteRequestStart, noteRequestEnd, attachMcpActivityTap, idleReapMessage } from "../src/lifecycle.js";
+import {
+  startLifecycleGuard,
+  makeDefaultIsParentAlive,
+  bridgeChildIdleTimeoutMs,
+  noteMcpActivity,
+  noteRequestStart,
+  noteRequestEnd,
+  attachMcpActivityTap,
+  idleReapMessage,
+  traceInboundMcpRequest,
+  traceToolRequestStart,
+  traceToolRequestEnd,
+  __resetRequestLogForTests,
+} from "../src/lifecycle.js";
 
 // Resolve the tsx binary. Prefer the local devDep so the test doesn't depend
 // on a global tsx install or on Git Bash's `which` being on PATH; the PATH
@@ -538,6 +551,75 @@ describe("Lifecycle Guard — bridge-child idle reaper (#854)", () => {
     attachMcpActivityTap(empty);
     assert.equal(empty.onmessage, undefined, "no onmessage → no-op (does not synthesize one)");
     attachMcpActivityTap(null); // must not throw
+  });
+});
+
+describe("opt-in MCP request lifecycle diagnostics", () => {
+  const previous = process.env.CONTEXT_MODE_REQUEST_LOG;
+
+  afterEach(() => {
+    if (previous === undefined) delete process.env.CONTEXT_MODE_REQUEST_LOG;
+    else process.env.CONTEXT_MODE_REQUEST_LOG = previous;
+    __resetRequestLogForTests();
+  });
+
+  test("is silent by default and never serializes payloads", () => {
+    delete process.env.CONTEXT_MODE_REQUEST_LOG;
+    const lines: string[] = [];
+    traceInboundMcpRequest({
+      jsonrpc: "2.0",
+      id: "secret-id",
+      method: "tools/call",
+      params: { name: "ctx_batch_execute", arguments: { command: "SECRET_COMMAND" } },
+    }, (line) => lines.push(line));
+    assert.deepEqual(lines, []);
+  });
+
+  test("correlates receipt/start/end using opaque ids and redacted fields", () => {
+    process.env.CONTEXT_MODE_REQUEST_LOG = "1";
+    const lines: string[] = [];
+    const write = (line: string) => lines.push(line);
+    traceInboundMcpRequest({
+      jsonrpc: "2.0",
+      id: "raw-secret-request-id",
+      method: "tools/call",
+      params: { name: "ctx_batch_execute", arguments: { command: "SECRET_COMMAND" } },
+    }, write);
+    const trace = traceToolRequestStart("ctx_batch_execute", "raw-secret-request-id", write, () => 100);
+    traceToolRequestEnd(trace, "ok", write, () => 137);
+
+    assert.equal(lines.length, 3);
+    assert.ok(lines.every((line) => line.includes('"request":"req-000001"')));
+    assert.ok(lines[0].includes('"phase":"received"'));
+    assert.ok(lines[1].includes('"phase":"handler_start"'));
+    assert.ok(lines[2].includes('"phase":"handler_end"'));
+    assert.ok(lines[2].includes('"duration_ms":37'));
+    const output = lines.join("");
+    assert.ok(!output.includes("raw-secret-request-id"));
+    assert.ok(!output.includes("SECRET_COMMAND"));
+  });
+
+  test("sanitizes hostile tool names and classifies cancellation without error text", () => {
+    process.env.CONTEXT_MODE_REQUEST_LOG = "1";
+    const lines: string[] = [];
+    const write = (line: string) => lines.push(line);
+    traceInboundMcpRequest({ id: 7, method: "tools/call", params: { name: "ctx_bad\nSECRET" } }, write);
+    const trace = traceToolRequestStart("ctx_bad\nSECRET", 7, write, () => 10);
+    traceToolRequestEnd(trace, "cancelled", write, () => 12);
+    const output = lines.join("");
+    assert.ok(output.includes('"tool":"[unknown]"'));
+    assert.ok(output.includes('"outcome":"cancelled"'));
+    assert.ok(!output.includes("SECRET"));
+  });
+
+  test("does not retain or expose oversized raw request ids", () => {
+    process.env.CONTEXT_MODE_REQUEST_LOG = "1";
+    const lines: string[] = [];
+    const rawId = "SENSITIVE".repeat(1_000);
+    traceInboundMcpRequest({ id: rawId, method: "tools/call", params: { name: "ctx_search" } }, (line) => lines.push(line));
+    assert.equal(lines.length, 1);
+    assert.ok(lines[0].includes('"request":"req-000001"'));
+    assert.ok(!lines[0].includes("SENSITIVE"));
   });
 });
 

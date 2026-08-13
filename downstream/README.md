@@ -44,6 +44,12 @@ The incident-relevant store/search/SQLite/batch test baseline is green. The
 complete upstream suite is not green on this Windows host; its known baseline
 failures are recorded rather than silently waived.
 
+An explicitly authorized follow-up candidate is being maintained on
+`downstream/integration-runtime-observability-2026-08-13`. It adds the reviewed
+upstream SQLite I/O retry from #1030, opt-in payload-free MCP request lifecycle
+diagnostics, and the Pi bridge-only cancellation portion of #1029. It does not
+replace the active July runtime until separately verified and authorized.
+
 Not part of this phase:
 
 - no weekly patch train;
@@ -59,6 +65,7 @@ Not part of this phase:
 - [Work log](WORKLOG.md)
 - [Complete PR review](PR-REVIEW-2026-07-31.md)
 - [Runtime/Codex import ledger](IMPORT-2026-07-31.md)
+- [Runtime/observability follow-up](IMPORT-2026-08-13.md)
 - [Real MCP smoke harness](smoke/mcp-runtime-smoke.mjs)
 
 ## License

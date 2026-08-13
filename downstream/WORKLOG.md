@@ -332,3 +332,71 @@ Afterward, verify that:
 - The global npm package remains installed as a rollback runtime. No package
   was published, no database was reset, no remote branch was changed, and no
   weekly automation was added.
+
+## 2026-08-13 runtime and observability follow-up
+
+### Scope and branch
+
+- Reviewed the 12 pull requests opened after the 2026-07-31 cutoff, including
+  the closed duplicate #1027.
+- Read the Pi Hub 2026-08-12 wedged-turn incident before choosing the change set.
+- Created `downstream/integration-runtime-observability-2026-08-13` from the
+  tested July integration tip `c1a8649`.
+- Preserved the boundary: no push, stable promotion, live configuration change,
+  service restart, database cutover, scheduled automation, or package publish.
+
+### Upstream reliability import
+
+- Fetched only `pull/1030/head` into `upstream/pr/1030`.
+- Verified exact head `eaad703` and cherry-picked it with `-x` as `7ad74a7`.
+- The change retries transient `SQLITE_IOERR` / `disk I/O error` through the
+  existing bounded backoff while leaving corruption recovery unchanged.
+
+### Request lifecycle diagnostics
+
+- Added `CONTEXT_MODE_REQUEST_LOG=1`, disabled by default.
+- Added payload-free stderr phases for transport receipt and registered handler
+  start/end/error, correlated by opaque process-local ids.
+- Explicitly excluded arguments, output, paths, raw ids, auth data, exception
+  messages, stacks, and environment values.
+- Kept diagnostics best-effort so logging failure cannot break MCP dispatch.
+
+### Selective Pi cancellation port
+
+- Did not cherry-pick conflicted PR #1029.
+- Ported only Pi bridge signal forwarding, pending cleanup, and
+  `notifications/cancelled`; retained the fork's existing #1009 executor/server
+  cancellation implementation.
+- Verified the installed Pi Agent Core 0.84.0 registered-tool contract supplies
+  an optional third `AbortSignal` argument.
+
+### Early verification
+
+- Targeted `store`, lifecycle, and Pi MCP bridge tests: passed.
+- `npm.cmd run typecheck`: passed.
+
+### Final verification
+
+- `npm.cmd run build`: passed.
+- Six generated-bundle assertions: passed.
+- Asymmetric drift and packaged-helper assertion: passed.
+- Focused serialized lane covering lifecycle, Pi bridge, store, core server,
+  and executor cancellation: passed.
+- Existing 9 MiB Codex stdio smoke: passed with 12 tools, exactly 8 MiB
+  indexed, 1,048,601 bytes dropped, a 4,100-byte response, successful search
+  retrieval, and successful stats.
+- After the review fixes and bundle rebuild, the first repeat of that smoke
+  failed because the immediate follow-up `ctx_search` reported an empty
+  knowledge base despite the batch response reporting indexed bytes. A direct
+  rerun passed with the expected marker. This intermittent pre-existing smoke
+  timing/storage-routing symptom remains recorded; it was not hidden or used as
+  proof that the candidate is deterministically green.
+- New opt-in request-log stdio smoke: passed; receipt/start/end phases appeared
+  on stderr and a secret marker in tool arguments did not appear in diagnostics.
+- Local built `cli.bundle.mjs doctor --platform codex`: passed server, storage,
+  hooks, plugin registration, and SQLite/FTS5 checks.
+- `git diff --check`: passed.
+- Lightweight local secret-pattern scan over the non-generated diff: no matches.
+- Structured `autoreview --mode local`: blocked before model review because the
+  required TruffleHog binary is not installed; no bypass or installation was
+  attempted. An independent read-only code-review lane was used instead.

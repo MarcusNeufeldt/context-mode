@@ -138,3 +138,37 @@ at this checkout's built `cli.bundle.mjs`. Keep the global npm package installed
 and preserve the prior Codex config as rollback evidence. Do not npm-link,
 publish, reset storage, or rewrite hook configuration as part of the cutover.
 Require both a local doctor pass and a fresh Codex-hosted MCP tool call.
+
+## D-016: Run one bounded post-cutoff reliability follow-up
+
+- Date: 2026-08-13
+- Status: accepted
+
+After reviewing all pull requests opened since the 2026-07-31 import cutoff,
+import only #1030 as a complete upstream change. Port only the Pi bridge portion
+of #1029 because its executor/server changes overlap the already imported #1009
+and the upstream PR is conflicted. Do not expand the supported adapter set or
+start a recurring patch train as part of this follow-up.
+
+## D-017: Keep request diagnostics opt-in and payload-free
+
+- Date: 2026-08-13
+- Status: accepted
+
+Add request lifecycle observability for the Pi Hub wedged-turn failure class,
+but keep it disabled unless `CONTEXT_MODE_REQUEST_LOG=1`. Write only bounded
+stderr records containing phase, sanitized tool name, opaque per-process
+correlation id, terminal duration, and coarse outcome. Never log tool arguments,
+commands, queries, paths, results, raw JSON-RPC ids, environment values, auth
+metadata, exception messages, or stacks. Logging is diagnostic, not a request
+deadline or recovery mechanism.
+
+## D-018: Keep integration separate from active runtime changes
+
+- Date: 2026-08-13
+- Status: accepted
+
+Build and verify the follow-up on
+`downstream/integration-runtime-observability-2026-08-13`. Do not push, promote
+to `downstream/stable`, change Codex/Pi configuration, restart services, or open
+an active database without a separate authorization after evidence is reviewed.

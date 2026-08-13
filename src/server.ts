@@ -39,7 +39,15 @@ import {
   hasBunRuntime,
 } from "./runtime.js";
 import { classifyNonZeroExit } from "./exit-classify.js";
-import { startLifecycleGuard, noteMcpActivity, noteRequestStart, noteRequestEnd, attachMcpActivityTap } from "./lifecycle.js";
+import {
+  startLifecycleGuard,
+  noteMcpActivity,
+  noteRequestStart,
+  noteRequestEnd,
+  attachMcpActivityTap,
+  traceToolRequestStart,
+  traceToolRequestEnd,
+} from "./lifecycle.js";
 import { charSafePrefix } from "./truncate.js";
 import {
   describeStorageDirectorySource,
@@ -300,11 +308,14 @@ const originalRegisterTool = server.registerTool.bind(server);
   return (originalRegisterTool as unknown as (...callArgs: unknown[]) => unknown)(...args);
 };
 
-function wrapToolHandler(
+export function wrapToolHandler(
   name: string,
   handler: (toolArgs: Record<string, unknown>, extra?: unknown) => Promise<unknown> | unknown,
 ): (toolArgs: Record<string, unknown>, extra?: unknown) => Promise<unknown> {
   return async (toolArgs: Record<string, unknown>, extra?: unknown) => {
+    const requestExtra = extra as { requestId?: unknown; signal?: AbortSignal } | undefined;
+    const requestTrace = traceToolRequestStart(name, requestExtra?.requestId);
+    let requestOutcome: "ok" | "error" | "cancelled" = "ok";
     // #854: mark a tool call in-flight so the bridge-child idle reaper never
     // shuts the server down mid-execution during a long ctx_execute/batch that
     // emits no further inbound messages. Symmetric end in finally (success+error).
@@ -316,6 +327,7 @@ function wrapToolHandler(
       // every handler saw extra === {} so no running execution could be cancelled.
       return await handler(toolArgs, extra);
     } catch (err) {
+      requestOutcome = requestExtra?.signal?.aborted ? "cancelled" : "error";
       const result = storageErrorResult(err);
       if (result) {
         try {
@@ -327,6 +339,8 @@ function wrapToolHandler(
       }
       throw err;
     } finally {
+      if (requestExtra?.signal?.aborted) requestOutcome = "cancelled";
+      traceToolRequestEnd(requestTrace, requestOutcome);
       noteRequestEnd();
     }
   };

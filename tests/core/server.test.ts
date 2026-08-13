@@ -45,7 +45,7 @@ import {
   StorageDirectoryError,
 } from "../../src/session/db.js";
 import { ROUTING_BLOCK } from "../../hooks/routing-block.mjs";
-import { sanitizeSchemaForStrictClients, resolveExecTimeout, AGY_DEFAULT_EXEC_TIMEOUT_MS, REGISTERED_CTX_TOOLS } from "../../src/server.js";
+import { sanitizeSchemaForStrictClients, resolveExecTimeout, AGY_DEFAULT_EXEC_TIMEOUT_MS, REGISTERED_CTX_TOOLS, wrapToolHandler } from "../../src/server.js";
 import { stripJsonComments, parseJsonc } from "../../src/util/jsonc.js";
 import { resolveProjectDir } from "../../src/util/project-dir.js";
 
@@ -6857,6 +6857,35 @@ describe("ctx_* MCP tool annotations (#846)", () => {
       "ctx_fetch_and_index", "ctx_purge", "ctx_upgrade", "ctx_insight",
     ]) {
       expect(find(name)!.config.annotations!.readOnlyHint).toBe(false);
+    }
+  });
+});
+
+describe("request lifecycle cancellation outcome", () => {
+  test("logs cancellation when a handler resolves normally after its signal aborts", async () => {
+    const previous = process.env.CONTEXT_MODE_REQUEST_LOG;
+    process.env.CONTEXT_MODE_REQUEST_LOG = "1";
+    const controller = new AbortController();
+    const chunks: string[] = [];
+    const originalWrite = process.stderr.write.bind(process.stderr);
+    process.stderr.write = ((chunk: string | Uint8Array) => {
+      chunks.push(String(chunk));
+      return true;
+    }) as typeof process.stderr.write;
+    try {
+      const handler = wrapToolHandler("ctx_execute", async () => {
+        controller.abort(new Error("cancelled"));
+        return { content: [{ type: "text", text: "resolved abort" }] };
+      });
+      await handler({}, { requestId: 77, signal: controller.signal });
+      const output = chunks.join("");
+      expect(output).toContain('"phase":"handler_error"');
+      expect(output).toContain('"outcome":"cancelled"');
+      expect(output).not.toContain('"phase":"handler_end"');
+    } finally {
+      process.stderr.write = originalWrite;
+      if (previous === undefined) delete process.env.CONTEXT_MODE_REQUEST_LOG;
+      else process.env.CONTEXT_MODE_REQUEST_LOG = previous;
     }
   });
 });

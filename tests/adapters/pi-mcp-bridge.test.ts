@@ -139,6 +139,44 @@ describe("bootstrapMCPTools — recursion guard (#516)", () => {
   });
 });
 
+describe("bootstrapMCPTools — Pi cancellation forwarding", () => {
+  it("passes the registered tool AbortSignal to the MCP bridge call", async () => {
+    const { bootstrapMCPTools, MCPStdioClient } = await import("../../src/adapters/pi/mcp-bridge.js");
+    const realStart = MCPStdioClient.prototype.start;
+    const realInit = MCPStdioClient.prototype.initialize;
+    const realList = MCPStdioClient.prototype.listTools;
+    const realCall = MCPStdioClient.prototype.callTool;
+    const realShutdown = MCPStdioClient.prototype.shutdown;
+    let registered: { execute: (id: string, params: Record<string, unknown>, signal?: AbortSignal) => Promise<unknown> } | undefined;
+    let seenSignal: AbortSignal | undefined;
+    MCPStdioClient.prototype.start = function () {};
+    MCPStdioClient.prototype.initialize = async function () {};
+    MCPStdioClient.prototype.listTools = async function () {
+      return [{ name: "ctx_execute", inputSchema: { type: "object", properties: {} } }];
+    };
+    MCPStdioClient.prototype.callTool = async function (_name, _args, signal) {
+      seenSignal = signal;
+      return { content: [{ type: "text", text: "ok" }] };
+    };
+    MCPStdioClient.prototype.shutdown = function () {};
+    try {
+      const handle = await bootstrapMCPTools({
+        registerTool: (tool) => { registered = tool; },
+      }, "/unused/server.mjs", { _resolveJsRuntime: () => process.execPath });
+      const controller = new AbortController();
+      await registered!.execute("call-1", {}, controller.signal);
+      expect(seenSignal).toBe(controller.signal);
+      handle.shutdown();
+    } finally {
+      MCPStdioClient.prototype.start = realStart;
+      MCPStdioClient.prototype.initialize = realInit;
+      MCPStdioClient.prototype.listTools = realList;
+      MCPStdioClient.prototype.callTool = realCall;
+      MCPStdioClient.prototype.shutdown = realShutdown;
+    }
+  });
+});
+
 // Slice 4 — graceful skip when no JS runtime
 describe("bootstrapMCPTools — no JS runtime + execPath is pi (#516)", () => {
   it("logs to pi.logger (NOT the TUI terminal) and returns an empty handle without throwing (#868)", async () => {
@@ -628,6 +666,75 @@ describe("MCPStdioClient — request() respawns for any method after idle exit (
 // >120s while a `tools/call` is in flight MUST NOT reject it. The
 // initialize path still rejects at 60s by default (regression guard).
 describe("MCPStdioClient — callTool has no bridge-imposed timeout (#643)", () => {
+  it("callTool sends MCP cancellation, rejects locally, and clears pending", async () => {
+    const { MCPStdioClient } = await import("../../src/adapters/pi/mcp-bridge.js");
+    const frames: Array<Record<string, unknown>> = [];
+    const client = new MCPStdioClient("/unused/server.mjs");
+    const stdin = {
+      destroyed: false,
+      writableEnded: false,
+      closed: false,
+      write: (data: string, cb?: (err?: Error) => void) => {
+        frames.push(JSON.parse(data.trim()) as Record<string, unknown>);
+        cb?.();
+        return true;
+      },
+    };
+    (client as unknown as { child: unknown }).child = { stdin };
+    const controller = new AbortController();
+    const inFlight = client.callTool("ctx_execute", { command: "hidden" }, controller.signal);
+    controller.abort(new Error("user cancelled"));
+
+    await expect(inFlight).rejects.toThrow("user cancelled");
+    expect(frames[0]).toMatchObject({ method: "tools/call" });
+    expect(frames[1]).toMatchObject({
+      method: "notifications/cancelled",
+      params: { requestId: 1 },
+    });
+    expect((client as unknown as { pending: Map<number, unknown> }).pending.size).toBe(0);
+  });
+
+  it("rejects a pre-aborted signal without writing a tools/call frame", async () => {
+    const { MCPStdioClient } = await import("../../src/adapters/pi/mcp-bridge.js");
+    const frames: string[] = [];
+    const client = new MCPStdioClient("/unused/server.mjs");
+    (client as unknown as { child: unknown }).child = {
+      stdin: {
+        destroyed: false,
+        writableEnded: false,
+        closed: false,
+        write: (data: string) => { frames.push(data); return true; },
+      },
+    };
+    const controller = new AbortController();
+    controller.abort(new Error("already cancelled"));
+    await expect(client.callTool("ctx_execute", {}, controller.signal)).rejects.toThrow("already cancelled");
+    expect(frames).toEqual([]);
+  });
+
+  it("settles and clears pending even when the cancellation notification write throws", async () => {
+    const { MCPStdioClient } = await import("../../src/adapters/pi/mcp-bridge.js");
+    let writes = 0;
+    const client = new MCPStdioClient("/unused/server.mjs");
+    (client as unknown as { child: unknown }).child = {
+      stdin: {
+        destroyed: false,
+        writableEnded: false,
+        closed: false,
+        write: (_data: string, cb?: (err?: Error) => void) => {
+          writes++;
+          if (writes === 1) { cb?.(); return true; }
+          throw new Error("generic cancellation write failure");
+        },
+      },
+    };
+    const controller = new AbortController();
+    const inFlight = client.callTool("ctx_execute", {}, controller.signal);
+    controller.abort(new Error("cancel despite write failure"));
+    await expect(inFlight).rejects.toThrow("cancel despite write failure");
+    expect((client as unknown as { pending: Map<number, unknown> }).pending.size).toBe(0);
+  });
+
   it("callTool does not reject when bridge clock advances past the old 120s ceiling", async () => {
     const { MCPStdioClient } = await import("../../src/adapters/pi/mcp-bridge.js");
     const client = new MCPStdioClient("/unused/server.mjs");
