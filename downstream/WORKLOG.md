@@ -413,4 +413,25 @@ Afterward, verify that:
 - Kept the dated integration branches for provenance and selected
   `downstream/stable` as the steady-state checked-out branch.
 - Verified each host's actual registration and fresh MCP behavior after the
-  cutover; exact commands and outcomes follow in the final session report.
+  cutover.
+- Codex: `codex mcp get context-mode --json` resolves this checkout's
+  `cli.bundle.mjs`; a fresh ephemeral `codex exec` completed `ctx_stats` and
+  returned `CODEX_STABLE_OK`.
+- Pi: global package registration and the Pi Hub plugin API both resolve
+  `F:\explore\context_mode_fork`; a fresh loader invoked the registered stats
+  command. After the active-session count reached zero, restarted only the Pi
+  Hub server to discard its pre-promotion module cache. The replacement server
+  listened on port 30141 and reported the local package loaded with zero
+  diagnostics and zero running sessions.
+- Claude: removed the upstream marketplace registration, added this checkout
+  as the user marketplace, and reinstalled the user-scoped plugin with data
+  preserved. The installed record points to exact commit
+  `ef40b1e84b18f3732de1769205c2b73b23384db3`; installed and checkout bundle
+  hashes match, and a fresh headless Claude host completed `ctx_stats`.
+- Stopped only the two stale Claude context-mode child processes before the
+  reinstall. Preserved a dated backup of the former plugin cache. Other Claude
+  sessions and unrelated plugins were not changed.
+- The Claude local-marketplace installer temporarily rewrote tracked plugin
+  and hook manifests to machine-specific absolute paths. Restored their
+  portable committed forms and locally ignored only Claude's untracked runtime
+  log files in `.git/info/exclude`.

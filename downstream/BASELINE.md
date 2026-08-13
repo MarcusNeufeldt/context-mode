@@ -191,7 +191,7 @@ Candidate verification:
 
 ## 2026-08-13 stable promotion and host registration
 
-- `downstream/stable` fast-forward target: `ae2fc6d`
+- `downstream/stable` promoted through maintenance commit `ef40b1e`
 - Promotion type: fast-forward from `742d377`; no merge commit and no divergence
 - Steady-state checkout: `downstream/stable`
 - `main`: unchanged clean upstream mirror
@@ -200,3 +200,15 @@ Candidate verification:
 - Claude registration: verified against the same checkout/runtime path
 - Global npm `context-mode@1.0.169`: retained as rollback, not selected by the
   three verified host registrations
+
+Post-cutover host evidence:
+
+- Codex resolves `F:/explore/context_mode_fork/cli.bundle.mjs`; a fresh
+  ephemeral host completed `ctx_stats` and returned `CODEX_STABLE_OK`.
+- Pi and Pi Hub resolve the local package and
+  `build/adapters/pi/extension.js`; a fresh loader smoke passed. Pi Hub was
+  restarted once while no agent sessions were running, then reported the local
+  package loaded with zero diagnostics.
+- Claude's user marketplace is the local checkout. Its installed cache records
+  git commit `ef40b1e84b18f3732de1769205c2b73b23384db3`, matches the checkout's
+  built-bundle hashes, and a fresh host completed `ctx_stats`.

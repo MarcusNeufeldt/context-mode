@@ -38,7 +38,9 @@ Bootstrap, one-time runtime/Codex integration, and local live MCP cutover:
 - the Codex `context-mode` MCP registration now launches this checkout's
   `cli.bundle.mjs`;
 - a fresh ephemeral Codex host loaded the registration and completed
-  `ctx_stats`.
+  `ctx_stats`;
+- Pi/Pi Hub and Claude now resolve the same stable checkout, with fresh-host
+  `ctx_stats` checks completed after cutover.
 
 The incident-relevant store/search/SQLite/batch test baseline is green. The
 complete upstream suite is not green on this Windows host; its known baseline
@@ -55,8 +57,7 @@ Not part of this phase:
 - no weekly patch train;
 - no scheduled automation;
 - no npm link or overwrite of the retained global npm rollback package;
-- no package publication;
-- no remote push while the SSH YubiKey is unavailable.
+- no package publication.
 
 ## Records
 
