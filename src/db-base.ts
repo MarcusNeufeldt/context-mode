@@ -618,17 +618,39 @@ export abstract class SQLiteBase {
     this.#dbPath = dbPath;
     cleanOrphanedWALFiles(dbPath);
     let db: DatabaseInstance;
+    // Opening is retried on contention, not just on corruption. Every process
+    // working a project opens this same file - the Pi extension, its host, and
+    // every concurrent subagent run - and `journal_mode = WAL` needs a brief
+    // exclusive lock. Losing that race threw `database is locked` straight out
+    // of the constructor, which surfaced to the user as
+    // `Failed to load extension: database is locked` and killed the whole
+    // subagent run before it produced any output. withRetry() already treats
+    // SQLITE_BUSY as retryable; the open path simply was not using it.
+    const openDatabase = (): DatabaseInstance => {
+      // 8s rather than 30s: withRetry supplies the patience now, and four attempts at
+      // the old 30s busy handler would block this thread for ~2 minutes - four times
+      // worse than the single attempt it replaced. pi-hub hosts this extension on its
+      // event loop, so the total matters more than any one attempt.
+      const opened = new Database(dbPath, { timeout: 8000 });
+      try {
+        applyWALPragmas(opened);
+      } catch (err) {
+        // Without this, a pragma failure leaks the connection on every attempt, and a
+        // held handle can defeat renameCorruptDB() in the recovery path below.
+        try { opened.close(); } catch { /* already unusable */ }
+        throw err;
+      }
+      return opened;
+    };
     try {
-      db = new Database(dbPath, { timeout: 30000 });
-      applyWALPragmas(db);
+      db = withRetry(openDatabase);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       if (isSQLiteCorruptionError(msg)) {
         renameCorruptDB(dbPath);
         cleanOrphanedWALFiles(dbPath);
         try {
-          db = new Database(dbPath, { timeout: 30000 });
-          applyWALPragmas(db);
+          db = withRetry(openDatabase);
         } catch (retryErr) {
           throw new Error(
             `Failed to create fresh DB after renaming corrupt file: ${retryErr instanceof Error ? retryErr.message : String(retryErr)}`
@@ -640,8 +662,11 @@ export abstract class SQLiteBase {
     }
     this.#db = db;
     _liveDBs.add(this.#db);
-    this.initSchema();
-    this.prepareStatements();
+    // Schema init writes (CREATE TABLE / CREATE VIRTUAL TABLE), so it can lose
+    // the same race as the open above. Every statement here is idempotent
+    // (`IF NOT EXISTS`), which is what makes retrying it safe.
+    withRetry(() => this.initSchema());
+    withRetry(() => this.prepareStatements());
   }
 
   /** Called once after WAL pragmas are applied. Subclasses run CREATE TABLE/VIRTUAL TABLE here. */

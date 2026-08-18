@@ -460,3 +460,14 @@ Afterward, verify that:
 - Did not run the full bundle build because the checkout already contained
   unrelated modifications to source and generated bundles; those changes were
   preserved.
+
+## 2026-08-18: Preserve bounded SQLite initialization retry
+
+- Preserved the pre-existing `src/db-base.ts` change that routes database open,
+  WAL pragma setup, idempotent schema creation, and statement preparation
+  through the shared bounded SQLite retry policy.
+- Reduced the per-attempt driver timeout from 30 seconds to 8 seconds so the
+  four-attempt envelope remains bounded for Pi Hub's event loop.
+- Ensured a connection is closed when WAL pragma setup fails before retrying.
+- Added source-contract regression coverage in
+  `tests/util/db-base-platform-gate.test.ts`.

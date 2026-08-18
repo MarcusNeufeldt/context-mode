@@ -343,6 +343,27 @@ describe("Issue #642 — node:sqlite branch directly", () => {
   );
 });
 
+describe("SQLiteBase concurrent initialization retries", () => {
+  it("retries open, schema initialization, and statement preparation", () => {
+    const dbBasePath = resolve(__dirname, "..", "..", "src", "db-base.ts");
+    const src = readFileSync(dbBasePath, "utf8");
+    const classBody = src.slice(src.indexOf("export abstract class SQLiteBase"));
+
+    expect(classBody.match(/db = withRetry\(openDatabase\);/g)).toHaveLength(2);
+    expect(classBody).toContain("withRetry(() => this.initSchema())");
+    expect(classBody).toContain("withRetry(() => this.prepareStatements())");
+  });
+
+  it("closes a connection when WAL pragma setup fails before retrying", () => {
+    const dbBasePath = resolve(__dirname, "..", "..", "src", "db-base.ts");
+    const src = readFileSync(dbBasePath, "utf8");
+    const openDatabase = src.split("const openDatabase =")[1]?.split("return opened;")[0] ?? "";
+
+    expect(openDatabase).toContain("applyWALPragmas(opened)");
+    expect(openDatabase).toMatch(/catch[\s\S]*opened\.close\(\)[\s\S]*throw err/);
+  });
+});
+
 describe("v1.0.130 — SQLiteBase lifecycle composition", () => {
   it("close() then re-open on the same on-disk path succeeds (no leaked state)", async () => {
     // Mirror the multi-window "kill A, start B" flow: process A opens,

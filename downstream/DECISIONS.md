@@ -195,3 +195,14 @@ without their MCP tools and preserves every other ambient child extension.
 Discover context-mode's Pi skills dynamically from that same parent-only
 adapter instead of the static package manifest, so child skill catalogs exclude
 context-mode while parent Pi sessions continue loading it normally.
+
+## D-021: Retry bounded SQLite initialization contention
+
+- Date: 2026-08-18
+- Status: accepted
+
+Apply the existing bounded SQLite retry policy to database open/WAL setup,
+idempotent schema creation, and statement preparation. Use an 8-second driver
+busy timeout inside the four-attempt retry envelope so a contended Pi Hub event
+loop cannot block for roughly two minutes. Close failed pre-initialization
+connections before retrying to avoid leaking handles on Windows.
