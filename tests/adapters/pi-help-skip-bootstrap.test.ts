@@ -39,6 +39,7 @@ afterEach(() => {
   }
   delete process.env.PI_PROJECT_DIR;
   delete process.env.CLAUDE_PROJECT_DIR;
+  delete process.env.PI_SUBAGENT_CHILD;
 });
 
 function createMockPi() {
@@ -84,6 +85,28 @@ async function registerWithBootstrapSpy(argv: string[]) {
 }
 
 describe("piExtension — lazy MCP bootstrap avoids brittle argv detection (#534, #809)", () => {
+  it("discovers context-mode skills only in parent Pi sessions", async () => {
+    const { pi, spy } = await registerWithBootstrapSpy([]);
+    const registration = pi.on.mock.calls.find(([event]) => event === "resources_discover");
+
+    expect(registration).toBeDefined();
+    expect(await registration![1]()).toEqual({
+      skillPaths: [expect.stringMatching(/[\\/]skills$/)],
+    });
+    spy.mockRestore();
+  });
+
+  it("does not load in pi-subagents children", async () => {
+    process.env.PI_SUBAGENT_CHILD = "1";
+    const { pi, spy } = await registerWithBootstrapSpy(["-p", "task"]);
+
+    await pi._trigger("before_agent_start", { prompt: "task", systemPrompt: "" });
+
+    expect(pi.on).not.toHaveBeenCalled();
+    expect(spy).not.toHaveBeenCalled();
+    spy.mockRestore();
+  });
+
   it.each([
     ["--help"],
     ["-v"],

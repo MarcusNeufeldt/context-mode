@@ -183,3 +183,15 @@ Fast-forward `downstream/stable` to the verified observability candidate and use
 clean upstream mirror and preserve the dated integration branches as historical
 provenance. Point Codex, Pi, and Claude at this checkout's stable built runtime;
 retain the global npm package only as rollback.
+
+## D-020: Keep context-mode out of pi-subagents children
+
+- Date: 2026-08-18
+- Status: accepted
+
+When the Pi adapter sees `PI_SUBAGENT_CHILD=1`, load none of context-mode in
+that process. Excluding the whole adapter avoids leaving routing blocks active
+without their MCP tools and preserves every other ambient child extension.
+Discover context-mode's Pi skills dynamically from that same parent-only
+adapter instead of the static package manifest, so child skill catalogs exclude
+context-mode while parent Pi sessions continue loading it normally.

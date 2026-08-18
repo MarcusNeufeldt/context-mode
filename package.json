@@ -30,9 +30,6 @@
   "pi": {
     "extensions": [
       "./build/adapters/pi/extension.js"
-    ],
-    "skills": [
-      "./skills"
     ]
   },
   "openclaw": {

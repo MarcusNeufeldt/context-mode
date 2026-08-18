@@ -428,8 +428,12 @@ export function resolvePiWorkspaceDir(opts: {
 
 /** Pi extension default export. Called once by Pi runtime with the extension API. */
 export default function piExtension(pi: any): void {
+  if (process.env.PI_SUBAGENT_CHILD === "1") return;
+
   const buildDir = dirname(fileURLToPath(import.meta.url));
   const pluginRoot = resolve(buildDir, "..", "..", "..");
+  pi.on("resources_discover", () => ({ skillPaths: [resolve(pluginRoot, "skills")] }));
+
   const serverBundle = resolve(pluginRoot, "server.bundle.mjs");
   let mcpBridgeStarted = false;
   let mcpBridgeGeneration = 0;

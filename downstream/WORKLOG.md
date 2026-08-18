@@ -435,3 +435,28 @@ Afterward, verify that:
   and hook manifests to machine-specific absolute paths. Restored their
   portable committed forms and locally ignored only Claude's untracked runtime
   log files in `.git/info/exclude`.
+
+## 2026-08-18: Exclude context-mode from pi-subagents children
+
+- Added an early return in the Pi adapter when `PI_SUBAGENT_CHILD=1`, the child
+  marker set by pi-subagents. This prevents the MCP bridge, routing hooks, and
+  session capture from loading in those child processes while leaving parent Pi
+  sessions unchanged.
+- Moved Pi skill discovery from the static package manifest into the parent-only
+  adapter registration. Context-mode and `ctx-*` skills therefore remain in
+  parent Pi sessions but are absent from pi-subagents children.
+- Removed the explicit empty `extensions:` override from the six user agents so
+  they inherit normal ambient extensions, including `pi-mcp-adapter`.
+- Added focused regression coverage proving parent skill discovery works while
+  child registration installs no hooks and never bootstraps the MCP bridge.
+- `pnpm exec vitest run tests/adapters/pi-help-skip-bootstrap.test.ts`: passed
+  (20 tests).
+- `pnpm run typecheck`: passed.
+- `pnpm exec tsc`: passed and refreshed the active generated Pi adapter.
+- E2E: all six user-scope agents (`delegate`, `oracle`, `researcher`, `reviewer`,
+  `scout`, `worker`) inherited 27 non-context-mode skills, accessed all 11
+  configured MCP servers through `mcp` and `mcpScript`, and reported no
+  context-mode skill, tool, or MCP server.
+- Did not run the full bundle build because the checkout already contained
+  unrelated modifications to source and generated bundles; those changes were
+  preserved.
