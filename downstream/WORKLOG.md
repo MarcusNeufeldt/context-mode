@@ -507,5 +507,30 @@ Afterward, verify that:
   findings: parent-mode test/smoke env isolation, unconditional session metadata
   after workspace rebind, Windows path-equivalence comparison, shutdown/new-session
   bridge detachment, strict smoke cleanup, and stale checkpoint-comment cleanup.
-- Did not push, publish, restart hosts, mutate active databases, or promote the
-  candidate to `downstream/stable`.
+- Initially left the verified candidate unpromoted and restored the active
+  checkout/build to `downstream/stable@246a156`.
+
+### Local stable cutover
+
+- Marcus then explicitly authorized taking the slice live.
+- Verified stable was a strict ancestor of the candidate and fast-forwarded
+  `downstream/stable` to `cd0b07ac` without a merge commit or rebase.
+- Rebuilt the active checkout; bundle and asymmetric-drift assertions passed.
+- Re-ran both Pi multi-workspace and Codex 9 MiB runtime smokes successfully.
+- Verified Codex MCP and Pi package registrations resolve
+  `F:\explore\context_mode_fork`; Pi Hub reports the package loaded with zero
+  diagnostics.
+- One Pi Hub interactive session was active, so the server was not restarted.
+  Fresh Pi CLI verification completed `ctx_stats`, proving new processes load
+  the promoted build.
+- Claude's semantic version was unchanged, so ordinary update did not refresh
+  its cache. With no Claude context-mode helpers running, preserved a dated
+  cache backup, reinstalled the user plugin from the local marketplace, and
+  verified exact commit `cd0b07ac` plus matching installed/checkout bundle
+  hashes. A fresh Claude host completed `ctx_stats`.
+- A fresh Codex host completed `ctx_stats`; unrelated Supabase OAuth and local
+  websocket fallback diagnostics did not affect the context-mode result.
+- Restored the portable tracked Claude manifests after the local installer
+  rewrote them to machine-specific absolute paths.
+- Did not push, modify `main`, mutate active databases, or terminate the current
+  interactive Pi session.

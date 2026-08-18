@@ -213,19 +213,25 @@ Post-cutover host evidence:
   git commit `ef40b1e84b18f3732de1769205c2b73b23384db3`, matches the checkout's
   built-bundle hashes, and a fresh host completed `ctx_stats`.
 
-## 2026-08-18 Pi stability candidate baseline
+## 2026-08-18 Pi stability active baseline
 
-- Candidate branch: `downstream/integration-pi-stability-2026-08-18`
-- Base: `downstream/stable@246a156`
+- Preserved candidate branch: `downstream/integration-pi-stability-2026-08-18`
+- Original base: `downstream/stable@246a156`
 - Preserved Pi subagent exclusion commit: `7dcaffd`
 - Preserved bounded SQLite initialization retry commit: `9bb4524`
 - Upstream #1056: `eddb43f`, cherry-picked with `-x` as `beea644`
-- Custom candidate scope: session-specific Pi workspace/bridge state and removal
-  of automatic content DB file deletion
-- Remote publication, stable promotion, host restart, and active DB mutation:
-  not performed
+- Custom scope: session-specific Pi workspace/bridge state and removal of
+  automatic content DB file deletion
+- Local `downstream/stable` fast-forwarded to `cd0b07ac`; active build refreshed
+- Codex and Pi registrations resolve `F:\explore\context_mode_fork`
+- Claude user plugin cache records `cd0b07ac`; installed and checkout bundle
+  hashes match
+- Fresh Codex, Pi, and Claude hosts completed `ctx_stats`
+- Pi Hub reports context-mode loaded from the checkout with zero diagnostics;
+  the server was not restarted while one interactive session remained active
+- Remote publication and active DB mutation: not performed
 
-Candidate verification:
+Verification:
 
 - typecheck/build/bundle/asymmetric-drift: passed
 - focused lane: 7 files passed, 285 tests passed, 3 skipped

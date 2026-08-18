@@ -52,13 +52,13 @@ upstream SQLite I/O retry from #1030, opt-in payload-free MCP request lifecycle
 diagnostics, and the Pi bridge-only cancellation portion of #1029. It does not
 change `main`, which remains the clean upstream mirror.
 
-A new unpromoted 2026-08-18 candidate imports #1056, binds Pi bridge/session
-state to each session's real workspace, removes unsafe automatic content-DB
-file deletion, and preserves the Pi subagent exclusion plus bounded SQLite
-initialization retry. It passed focused Pi/store tests, a two-project Pi smoke,
-the existing Codex stdio smoke, and the serialized Windows comparison baseline.
-No push, host restart, active DB mutation, or stable promotion is part of that
-candidate.
+The 2026-08-18 Pi stability slice was promoted by fast-forward to the local
+`downstream/stable` branch. It imports #1056, binds Pi bridge/session state to
+each session's real workspace, removes unsafe automatic content-DB file
+deletion, and preserves the Pi subagent exclusion plus bounded SQLite
+initialization retry. The active build and Claude plugin cache were refreshed;
+fresh Codex, Pi, and Claude hosts completed `ctx_stats`. No GitHub push or
+active database mutation was performed.
 
 Not part of this phase:
 

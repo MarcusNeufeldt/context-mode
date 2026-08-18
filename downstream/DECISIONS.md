@@ -237,3 +237,14 @@ coordination exist.
 Import #1056 with provenance. Remove per-close shared-WAL TRUNCATE and make mmap
 opt-in so Windows sibling processes cannot wedge live DB handles. Retain #988's
 PASSIVE timer and #1030's transient IOERR retry as complementary protections.
+
+## D-025: Promote the verified Pi stability slice locally
+
+- Date: 2026-08-18
+- Status: accepted
+
+Fast-forward the local `downstream/stable` branch to the verified candidate and
+refresh runtime outputs. Reinstall Claude's user plugin cache because its
+semantic version is unchanged and ordinary update will not copy the new commit.
+Verify fresh Codex, Pi, and Claude hosts. Do not push, mutate active databases,
+or restart Pi Hub while an interactive session remains active.
