@@ -229,7 +229,8 @@ Post-cutover host evidence:
 - Fresh Codex, Pi, and Claude hosts completed `ctx_stats`
 - Pi Hub reports context-mode loaded from the checkout with zero diagnostics;
   the server was not restarted while one interactive session remained active
-- Remote publication and active DB mutation: not performed
+- Fork publication: `MarcusNeufeldt/context-mode` `downstream/stable` at
+  `0b30620e`; active DB mutation not performed
 
 Verification:
 

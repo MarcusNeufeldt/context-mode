@@ -246,5 +246,15 @@ PASSIVE timer and #1030's transient IOERR retry as complementary protections.
 Fast-forward the local `downstream/stable` branch to the verified candidate and
 refresh runtime outputs. Reinstall Claude's user plugin cache because its
 semantic version is unchanged and ordinary update will not copy the new commit.
-Verify fresh Codex, Pi, and Claude hosts. Do not push, mutate active databases,
-or restart Pi Hub while an interactive session remains active.
+Verify fresh Codex, Pi, and Claude hosts. Do not push as part of the local
+cutover, mutate active databases, or restart Pi Hub while an interactive session
+remains active.
+
+## D-026: Publish verified local stable to Marcus's fork
+
+- Date: 2026-08-18
+- Status: accepted
+
+After separate authorization, push `downstream/stable` to
+`MarcusNeufeldt/context-mode` by SSH/YubiKey. Require a clean fast-forward,
+never force-push, and verify the resulting branch SHA through the GitHub broker.

@@ -57,8 +57,9 @@ The 2026-08-18 Pi stability slice was promoted by fast-forward to the local
 each session's real workspace, removes unsafe automatic content-DB file
 deletion, and preserves the Pi subagent exclusion plus bounded SQLite
 initialization retry. The active build and Claude plugin cache were refreshed;
-fresh Codex, Pi, and Claude hosts completed `ctx_stats`. No GitHub push or
-active database mutation was performed.
+fresh Codex, Pi, and Claude hosts completed `ctx_stats`. The verified local
+stable branch was then published to Marcus's fork; no active database mutation
+was performed.
 
 Not part of this phase:
 

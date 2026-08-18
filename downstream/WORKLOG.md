@@ -532,5 +532,14 @@ Afterward, verify that:
   websocket fallback diagnostics did not affect the context-mode result.
 - Restored the portable tracked Claude manifests after the local installer
   rewrote them to machine-specific absolute paths.
-- Did not push, modify `main`, mutate active databases, or terminate the current
+- Did not modify `main`, mutate active databases, or terminate the current
   interactive Pi session.
+
+### Fork publication
+
+- Marcus separately authorized publishing the verified stable branch.
+- Refreshed `origin`, verified `origin/downstream/stable@246a156` was a strict
+  ancestor, and pushed by SSH/YubiKey without force.
+- GitHub broker verification reported
+  `MarcusNeufeldt/context-mode` `downstream/stable@0b30620e`; the local branch
+  and tracking ref were synchronized and clean.
