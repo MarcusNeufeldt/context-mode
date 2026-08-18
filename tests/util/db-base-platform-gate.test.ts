@@ -352,6 +352,7 @@ describe("SQLiteBase concurrent initialization retries", () => {
     expect(classBody.match(/db = withRetry\(openDatabase\);/g)).toHaveLength(2);
     expect(classBody).toContain("withRetry(() => this.initSchema())");
     expect(classBody).toContain("withRetry(() => this.prepareStatements())");
+    expect(classBody).toMatch(/catch \(err\)[\s\S]*_liveDBs\.delete\(this\.#db\)[\s\S]*closeDB\(this\.#db\)[\s\S]*throw err/);
   });
 
   it("closes a connection when WAL pragma setup fails before retrying", () => {

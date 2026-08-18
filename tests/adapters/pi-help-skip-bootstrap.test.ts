@@ -15,7 +15,7 @@ import "../setup-home";
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -25,6 +25,7 @@ let originalArgv: string[];
 type HandlerFn = (...args: any[]) => any;
 
 beforeEach(() => {
+  delete process.env.PI_SUBAGENT_CHILD;
   scratch = mkdtempSync(join(tmpdir(), "ctx-pi-lazy-bridge-"));
   originalArgv = process.argv;
   vi.resetModules();
@@ -139,6 +140,66 @@ describe("piExtension — lazy MCP bootstrap avoids brittle argv detection (#534
     await pi._trigger("before_agent_start", { prompt: "task", systemPrompt: "" });
 
     expect(spy).toHaveBeenCalledTimes(1);
+    spy.mockRestore();
+  });
+
+  it("spawns the MCP bridge in the active Pi session workspace", async () => {
+    const workspace = join(scratch, "workspace");
+    mkdirSync(workspace, { recursive: true });
+    const { pi, spy } = await registerWithBootstrapSpy([]);
+    const ctx = {
+      cwd: workspace,
+      hasUI: true,
+      sessionManager: { getSessionFile: () => join(workspace, "session.jsonl") },
+    };
+
+    await pi._trigger("session_start", {}, ctx);
+    await pi._trigger(
+      "before_agent_start",
+      { prompt: "task", systemPrompt: "", systemPromptOptions: { cwd: workspace } },
+      ctx,
+    );
+
+    expect(spy).toHaveBeenCalledWith(
+      pi,
+      expect.stringMatching(/server\.bundle\.mjs$/),
+      expect.objectContaining({
+        cwd: workspace,
+        env: expect.objectContaining({
+          PI_WORKSPACE_DIR: workspace,
+          CONTEXT_MODE_PROJECT_DIR: workspace,
+        }),
+      }),
+    );
+    spy.mockRestore();
+  });
+
+  it("rebinds the bridge when one Pi registration changes workspace", async () => {
+    const workspaceA = join(scratch, "workspace-a");
+    const workspaceB = join(scratch, "workspace-b");
+    mkdirSync(workspaceA, { recursive: true });
+    mkdirSync(workspaceB, { recursive: true });
+    const { pi, spy } = await registerWithBootstrapSpy([]);
+    const context = (cwd: string) => ({
+      cwd,
+      hasUI: true,
+      sessionManager: { getSessionFile: () => join(cwd, "session.jsonl") },
+    });
+
+    await pi._trigger("session_start", {}, context(workspaceA));
+    await pi._trigger(
+      "before_agent_start",
+      { prompt: "first", systemPrompt: "", systemPromptOptions: { cwd: workspaceA } },
+      context(workspaceA),
+    );
+    await pi._trigger(
+      "before_agent_start",
+      { prompt: "second", systemPrompt: "", systemPromptOptions: { cwd: workspaceB } },
+      context(workspaceB),
+    );
+
+    expect(spy).toHaveBeenCalledTimes(2);
+    expect(spy.mock.calls.map((call) => call[2]?.cwd)).toEqual([workspaceA, workspaceB]);
     spy.mockRestore();
   });
 

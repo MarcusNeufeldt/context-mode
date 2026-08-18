@@ -425,12 +425,12 @@ export function closeDB(db: DatabaseInstance): void {
 /**
  * Start a periodic PASSIVE WAL checkpoint on `db`, returning a stop function.
  *
- * `closeDB()`'s `wal_checkpoint(TRUNCATE)` is the only WAL-truncation path, and
- * it only runs on graceful shutdown. A server killed hard (crash, reboot,
- * SIGKILL, or a Windows parent-death before the lifecycle guard fires) never
- * reaches it, so under multi-session load the shared content-store WAL can grow
- * unbounded — the reader-starvation failure ADR 0001 attributes to #560. A
- * PASSIVE checkpoint reclaims whatever WAL frames it can between reader gaps; it
+ * SQLite checkpoints when the last connection closes, but a server killed hard
+ * (crash, reboot, SIGKILL, or a Windows parent-death before the lifecycle guard
+ * fires) never reaches that path. Under multi-session load the shared
+ * content-store WAL can therefore grow unbounded — the reader-starvation failure
+ * ADR 0001 attributes to #560. A PASSIVE checkpoint reclaims whatever WAL frames
+ * it can between reader gaps; it
  * never blocks and touches no locking, so it stays fully within ADR 0001's
  * multi-writer contract (no EXCLUSIVE, no lockfile).
  *
@@ -679,11 +679,17 @@ export abstract class SQLiteBase {
     }
     this.#db = db;
     _liveDBs.add(this.#db);
-    // Schema init writes (CREATE TABLE / CREATE VIRTUAL TABLE), so it can lose
-    // the same race as the open above. Every statement here is idempotent
-    // (`IF NOT EXISTS`), which is what makes retrying it safe.
-    withRetry(() => this.initSchema());
-    withRetry(() => this.prepareStatements());
+    try {
+      // Schema init writes (CREATE TABLE / CREATE VIRTUAL TABLE), so it can lose
+      // the same race as the open above. Every statement here is idempotent
+      // (`IF NOT EXISTS`), which is what makes retrying it safe.
+      withRetry(() => this.initSchema());
+      withRetry(() => this.prepareStatements());
+    } catch (err) {
+      _liveDBs.delete(this.#db);
+      closeDB(this.#db);
+      throw err;
+    }
   }
 
   /** Called once after WAL pragmas are applied. Subclasses run CREATE TABLE/VIRTUAL TABLE here. */

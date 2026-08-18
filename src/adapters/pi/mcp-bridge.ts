@@ -99,7 +99,14 @@ export function resolveJsRuntimeForBridge(deps: ResolveDeps = {}): string | null
   } catch {
     candidate = null;
   }
-  if (candidate && !isPi(candidate)) return candidate;
+  if (candidate && !isPi(candidate)) {
+    // Runtime detection may return a bare command such as "bun". Resolve it
+    // before changing the child cwd: on Windows, spawn(shell:false) cannot
+    // execute a .cmd shim that happened to work only from the host project.
+    const resolved = which(candidate);
+    if (resolved && !isPi(resolved)) return resolved;
+    if (candidate.includes("/") || candidate.includes("\\")) return candidate;
+  }
 
   // 2. Fall back to PATH-resolved node, then bun.
   for (const cmd of ["node", "bun"]) {
@@ -413,6 +420,7 @@ export class MCPStdioClient {
      * terminal; bootstrapMCPTools wires this to the Pi host's file logger.
      */
     private readonly diag: BridgeDiag = () => {},
+    private readonly cwd?: string,
   ) {}
 
   /** Spawn the MCP child. Idempotent. */
@@ -504,6 +512,7 @@ export class MCPStdioClient {
       // write is rendered into the editor input box, blocking typing (#868).
       stdio: ["pipe", "pipe", "pipe"],
       env: childEnv,
+      cwd: this.cwd,
     });
     this.child.stdout?.on("data", (chunk) => this.onData(chunk));
     this.child.stderr?.on("data", (chunk: Buffer) => {
@@ -515,8 +524,14 @@ export class MCPStdioClient {
         if (line !== "") this.diag(`[mcp-bridge] ${line}`, "debug");
       }
     });
-    this.child.on("exit", () => this.onExit());
-    this.child.on("error", () => this.onExit());
+    this.child.on("exit", (code, signal) => {
+      this.diag(`[mcp-bridge] child exited code=${code ?? "null"} signal=${signal ?? "none"}`, "debug");
+      this.onExit();
+    });
+    this.child.on("error", (error) => {
+      this.diag(`[mcp-bridge] child process error (cwd=${this.cwd ?? "inherit"}): ${error.message}`, "debug");
+      this.onExit();
+    });
   }
 
   private onExit(): void {
@@ -951,6 +966,8 @@ export interface BootstrapOptions {
    * {@link isForegroundSession}.
    */
   foreground?: boolean;
+  /** Session workspace used as the MCP child process working directory. */
+  cwd?: string;
 }
 
 /**
@@ -1005,7 +1022,7 @@ export async function bootstrapMCPTools(
   // reaper disabled (CONTEXT_MODE_BRIDGE_IDLE_MS=0) so a human pause never drops
   // its tools; sub-context / non-interactive children keep the reaper (#854).
   const spawnEnv = foregroundBridgeEnv(env, options.foreground ?? false);
-  const client = new MCPStdioClient(serverScript, spawnEnv, runtime, diag);
+  const client = new MCPStdioClient(serverScript, spawnEnv, runtime, diag, options.cwd);
 
   // Retry-on-slow-initialize (#647).
   //

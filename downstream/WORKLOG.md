@@ -471,3 +471,41 @@ Afterward, verify that:
 - Ensured a connection is closed when WAL pragma setup fails before retrying.
 - Added source-contract regression coverage in
   `tests/util/db-base-platform-gate.test.ts`.
+
+## 2026-08-18: Pi workspace and shared-runtime stability integration
+
+- Snapshotted the full pre-existing dirty diff and status under the user temp
+  directory before mutation.
+- Created `downstream/integration-pi-stability-2026-08-18` from
+  `downstream/stable@246a156`.
+- Restored machine-specific Claude hook manifests to their portable tracked
+  forms; preserved source changes and regenerated bundles from source.
+- Committed the existing Pi subagent exclusion as `7dcaffd` and bounded SQLite
+  initialization retry as `9bb4524`.
+- Fetched only upstream PR #1056, verified head `eddb43f`, and cherry-picked it
+  with `-x` as `beea644`.
+- Replaced extension-load/process-cwd Pi attribution with session `ctx.cwd`,
+  made runtime state registration-local, and passed the session workspace to the
+  MCP child as cwd plus `PI_WORKSPACE_DIR` / `CONTEXT_MODE_PROJECT_DIR`.
+- Resolved detected bare JS runtimes before cross-workspace spawn; this exposed
+  and fixed a Windows `spawn bun ENOENT` path.
+- Removed startup `cleanupStaleContentDBs`: mtime/WAL age cannot prove another
+  process is dead. Explicit purge/forget remains available.
+- Added `downstream/smoke/pi-multi-workspace-smoke.mjs` covering two distinct
+  project roots, file-boundary isolation, distinct DB hashes, and five sibling
+  bridge open/close cycles on one project.
+- Focused lane passed: 7 files, 285 tests passed, 3 skipped.
+- Pi multi-workspace smoke passed.
+- Existing 9 MiB Codex stdio smoke passed with 12 tools, 8 MiB indexed,
+  1,048,601 bytes dropped, 4,100-byte response, and search retrieval.
+- Full serialized Windows suite: 211/215 files passed; 4,814 tests passed,
+  4 failed, 59 skipped; 163.18 seconds. Failures remained in known Windows
+  process-cleanup and symlink-privilege categories.
+- Verified the one test-owned surviving Bun PID by exact command line,
+  terminated only that process, and removed its test sandbox.
+- Three fresh read-only reviews reported no blockers. Applied their bounded
+  findings: parent-mode test/smoke env isolation, unconditional session metadata
+  after workspace rebind, Windows path-equivalence comparison, shutdown/new-session
+  bridge detachment, strict smoke cleanup, and stale checkpoint-comment cleanup.
+- Did not push, publish, restart hosts, mutate active databases, or promote the
+  candidate to `downstream/stable`.

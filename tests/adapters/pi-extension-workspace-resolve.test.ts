@@ -55,6 +55,18 @@ describe("resolvePiWorkspaceDir — issue #545 (project dir, not config dir)", (
     expect(result).toBe("/Users/x/from-shell");
   });
 
+  it("ignores poisoned string values from optional environment assignments", () => {
+    const result = resolvePiWorkspaceDir({
+      env: {
+        PI_WORKSPACE_DIR: "undefined",
+        PI_PROJECT_DIR: "null",
+      },
+      pwd: "/Users/x/safe-pwd",
+      cwd: "/Users/x/cwd-fallback",
+    });
+    expect(result).toBe("/Users/x/safe-pwd");
+  });
+
   it("cwd is the final fallback", () => {
     const result = resolvePiWorkspaceDir({
       env: {},

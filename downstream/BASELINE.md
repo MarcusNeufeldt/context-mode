@@ -212,3 +212,26 @@ Post-cutover host evidence:
 - Claude's user marketplace is the local checkout. Its installed cache records
   git commit `ef40b1e84b18f3732de1769205c2b73b23384db3`, matches the checkout's
   built-bundle hashes, and a fresh host completed `ctx_stats`.
+
+## 2026-08-18 Pi stability candidate baseline
+
+- Candidate branch: `downstream/integration-pi-stability-2026-08-18`
+- Base: `downstream/stable@246a156`
+- Preserved Pi subagent exclusion commit: `7dcaffd`
+- Preserved bounded SQLite initialization retry commit: `9bb4524`
+- Upstream #1056: `eddb43f`, cherry-picked with `-x` as `beea644`
+- Custom candidate scope: session-specific Pi workspace/bridge state and removal
+  of automatic content DB file deletion
+- Remote publication, stable promotion, host restart, and active DB mutation:
+  not performed
+
+Candidate verification:
+
+- typecheck/build/bundle/asymmetric-drift: passed
+- focused lane: 7 files passed, 285 tests passed, 3 skipped
+- Pi two-project/same-project-concurrency smoke: passed
+- Codex 9 MiB stdio smoke: passed
+- serialized Windows suite: 211 files passed, 4 failed; 4,814 tests passed,
+  4 failed, 59 skipped; failures match process-cleanup/symlink baseline classes
+
+Full implementation and evidence: `downstream/IMPORT-2026-08-18.md`.

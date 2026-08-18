@@ -12,7 +12,7 @@ import { AsyncLocalStorage } from "node:async_hooks";
 import { z } from "zod";
 import { PolyglotExecutor } from "./executor.js";
 import { runPool, type PoolJob } from "./runPool.js";
-import { ContentStore, cleanupStaleDBs, cleanupStaleContentDBs, type SearchResult, type IndexResult } from "./store.js";
+import { ContentStore, cleanupStaleDBs, type SearchResult, type IndexResult } from "./store.js";
 import {
   DEFAULT_BATCH_INGESTION_LIMITS,
   batchIngestionStructuredContent,
@@ -741,12 +741,12 @@ function getStore(): ContentStore {
   const dbPath = getStorePath();
   let _store = _stores.get(dbPath);
   if (!_store) {
-    // Content DB cleanup on fresh start is handled by SessionStart hook.
-    // Server just opens whatever DB exists (or creates new if hook deleted it).
+    // Content DB file deletion is explicit-only. Open the existing project DB
+    // here, or create it when the project has no prior store.
     _store = new ContentStore(dbPath);
     _stores.set(dbPath, _store);
     // #985: keep the shared content-store WAL bounded even on a hard exit that
-    // never reaches close()'s TRUNCATE checkpoint. PASSIVE never blocks and adds
+    // never reaches SQLite's last-connection auto-checkpoint. PASSIVE never blocks and adds
     // no locking (ADR 0001-safe). Default 60s; CONTEXT_MODE_WAL_CHECKPOINT_MS
     // tunes it, 0 disables.
     {
@@ -774,15 +774,11 @@ function getStore(): ContentStore {
       }
     });
 
-    // One-time startup cleanup: remove stale content DBs (>14 days)
-    try {
-      const contentDir = dirname(dbPath);
-      cleanupStaleContentDBs(contentDir, 14);
-      _store.cleanupStaleSources(14);
-      // Also clean legacy shared dir from before platform isolation
-      const legacyDir = join(homedir(), ".context-mode", "content");
-      if (existsSync(legacyDir)) cleanupStaleContentDBs(legacyDir, 0);
-    } catch { /* best-effort */ }
+    // Content DB files are never deleted automatically. Main DB and WAL mtimes
+    // do not prove liveness under SQLite WAL, so another process could otherwise
+    // unlink an active-but-idle session (#1024). Explicit ctx_purge/ctx_forget
+    // operations remain the safe cleanup boundary.
+    try { _store.cleanupStaleSources(14); } catch { /* best-effort */ }
 
     // Also clean old PID-based DBs from migration
     cleanupStaleDBs();

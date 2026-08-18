@@ -68,6 +68,18 @@ describe("resolveJsRuntimeForBridge — Pi fork-bomb guard (#516)", () => {
     expect(resolved).toBe("/usr/bin/node");
   });
 
+  it("resolves a detected bare runtime before spawning from another workspace", async () => {
+    const { resolveJsRuntimeForBridge } = await import("../../src/adapters/pi/mcp-bridge.js");
+
+    const resolved = resolveJsRuntimeForBridge({
+      detect: () => ({ javascript: "bun" }),
+      which: (cmd) => cmd === "bun" ? "C:\\Users\\test\\.bun\\bin\\bun.exe" : null,
+      execPath: "C:\\Program Files\\Pi\\pi.exe",
+    });
+
+    expect(resolved).toBe("C:\\Users\\test\\.bun\\bin\\bun.exe");
+  });
+
   it("rejects pi.exe (case-insensitive, .exe suffix) on Windows-shaped paths", async () => {
     const mod = await import("../../src/adapters/pi/mcp-bridge.js");
     const { resolveJsRuntimeForBridge } = mod as unknown as {

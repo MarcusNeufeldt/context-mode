@@ -129,31 +129,15 @@ export function isSafeCurlWget(segment: string): boolean {
   return isSilent;
 }
 
-// ── Module-level DB singleton ────────────────────────────
-
-const _dbSingletons = new Map<string, SessionDB>();
-let _sessionId = "";
-
-// MCP bridge handle. The bridge spawns server.bundle.mjs once and
-// registers each MCP tool through pi.registerTool() so the Pi LLM can
-// actually call ctx_execute / ctx_search / etc. (#426). Pi 0.73.x has
-// no native MCP support, so without this bridge the tools are
-// invisible to the LLM and the routing block is dead weight.
-let _mcpBridge: BridgeHandle | null = null;
-
 /**
- * Settles when the MCP bridge bootstrap has finished — resolves on
- * success AND on failure (the bootstrap is best-effort; failures are
- * logged to stderr but never propagated). Exposed for tests so they
- * can `await` the wiring deterministically without relying on internal
- * timing or `setImmediate` polling.
- *
- * Starts as an already-settled promise because the bridge is now bootstrapped
- * lazily from `before_agent_start`, not during extension discovery.
+ * Test-visible mirror of the most recently registered Pi extension's bridge
+ * bootstrap. Runtime state itself is kept inside each extension registration so
+ * Pi Hub sessions cannot overwrite one another in the shared host process.
  */
 export let _mcpBridgeReady: Promise<void> = Promise.resolve();
 
-// Cached buildAutoInjection (500-token cap, prioritized).
+// Cached buildAutoInjection (500-token cap, prioritized). This helper is pure,
+// so sharing it across extension registrations is safe.
 let _buildAutoInjection:
   | ((
       events: Array<{ category: string; data: string }>,
@@ -161,18 +145,6 @@ let _buildAutoInjection:
     ) => string)
   | null
   | undefined = undefined;
-
-// Set by session_compact; consumed by the next before_agent_start so the
-// FIRST post-compact injection is honestly labeled "compaction" (with the
-// fidelity line telling the agent where its history lives). Read-and-cleared
-// at the top of the handler so it can never strand true and mislabel a
-// later, unrelated turn.
-let _pendingCompactLabel = false;
-
-// Pending context to inject via the 'context' hook (avoiding systemPrompt mutation
-// which breaks prefix prompt cache on DeepSeek/Anthropic/OpenAI).
-// See: https://github.com/mksglu/context-mode/issues/598
-let _pendingContext = "";
 async function getAutoInjection(
   pluginRoot: string,
 ): Promise<((events: Array<{ category: string; data: string }>, source: "compaction" | "active_memory") => string) | null> {
@@ -216,16 +188,6 @@ function getSessionDir(): string {
 // canonical filename contract.
 function getDBPath(projectDir: string): string {
   return resolveSessionDbPath({ projectDir, sessionsDir: getSessionDir() });
-}
-
-function getOrCreateDB(projectDir: string): SessionDB {
-  const dbPath = getDBPath(projectDir);
-  let db = _dbSingletons.get(dbPath);
-  if (!db) {
-    db = new SessionDB({ dbPath });
-    _dbSingletons.set(dbPath, db);
-  }
-  return db;
 }
 
 /** Derive a stable session ID from Pi's session file path (SHA256, 16 hex chars). */
@@ -340,40 +302,44 @@ function startPiMCPBridge(
   serverBundle: string,
   shouldKeepHandle: () => boolean,
   foreground: boolean,
+  workspaceDir: string,
+  onHandle: (handle: BridgeHandle) => void,
 ): Promise<void> {
-  if (existsSync(serverBundle)) {
-    _mcpBridgeReady = bootstrapMCPTools(pi, serverBundle, { foreground }).then(
-      (handle) => {
-        if (shouldKeepHandle()) {
-          _mcpBridge = handle;
-        } else {
-          // Bootstrap completed after this extension registration had already
-          // shut down or superseded the attempt. Do not publish a stale handle;
-          // immediately reclaim the child that bootstrap just spawned.
-          try {
-            handle.shutdown();
-          } catch {
-            // best effort — never throw from best-effort bridge cleanup
-          }
-        }
-      },
-      (err: unknown) => {
-        if (!shouldKeepHandle()) return;
-        const msg = err instanceof Error ? err.message : String(err);
-        // #868: route to Pi's file logger, never process.stderr (raw-mode TUI).
-        makeBridgeDiag(pi)(
-          `[context-mode] WARNING: failed to bridge MCP tools to Pi (${msg}). ` +
-            `ctx_* tools will not be callable from this session.`,
-        );
-      },
-    );
-  } else {
-    // No bundle on disk → nothing to await. Tests can still rely on
-    // _mcpBridgeReady being a settled promise.
-    _mcpBridgeReady = Promise.resolve();
-  }
+  if (!existsSync(serverBundle)) return Promise.resolve();
 
-  return _mcpBridgeReady;
+  return bootstrapMCPTools(pi, serverBundle, {
+    foreground,
+    cwd: workspaceDir,
+    env: {
+      ...process.env,
+      PI_WORKSPACE_DIR: workspaceDir,
+      CONTEXT_MODE_PROJECT_DIR: workspaceDir,
+    },
+  }).then(
+    (handle) => {
+      if (shouldKeepHandle()) {
+        onHandle(handle);
+      } else {
+        // Bootstrap completed after this extension registration had already
+        // shut down or superseded the attempt. Do not publish a stale handle;
+        // immediately reclaim the child that bootstrap just spawned.
+        try {
+          handle.shutdown();
+        } catch {
+          // best effort — never throw from best-effort bridge cleanup
+        }
+      }
+    },
+    (err: unknown) => {
+      if (!shouldKeepHandle()) return;
+      const msg = err instanceof Error ? err.message : String(err);
+      // #868: route to Pi's file logger, never process.stderr (raw-mode TUI).
+      makeBridgeDiag(pi)(
+        `[context-mode] WARNING: failed to bridge MCP tools to Pi (${msg}). ` +
+          `ctx_* tools will not be callable from this session.`,
+      );
+    },
+  );
 }
 
 /**
@@ -407,7 +373,7 @@ export function resolvePiWorkspaceDir(opts: {
   const home = opts.home ?? homedir();
   const piConfigDir = join(home, ".pi");
   const isUnderPi = (p: string | undefined): boolean => {
-    if (!p) return true;
+    if (!p || p === "undefined" || p === "null") return true;
     if (p === piConfigDir) return true;
     // Match both POSIX (/) and Windows (\) child-of relations.
     return p.startsWith(piConfigDir + "/") || p.startsWith(piConfigDir + "\\");
@@ -437,48 +403,81 @@ export default function piExtension(pi: any): void {
   const serverBundle = resolve(pluginRoot, "server.bundle.mjs");
   let mcpBridgeStarted = false;
   let mcpBridgeGeneration = 0;
-  const ensureMCPBridge = (foreground: boolean): Promise<void> => {
-    if (mcpBridgeStarted) return _mcpBridgeReady;
-    mcpBridgeStarted = true;
-    const generation = ++mcpBridgeGeneration;
-    return startPiMCPBridge(
-      pi,
-      serverBundle,
-      () => mcpBridgeStarted && mcpBridgeGeneration === generation,
-      foreground,
-    );
-  };
-  // Issue #545 — Pi workspace resolver. PI_CONFIG_DIR is Pi's CONFIG dir
-  // (~/.pi), NOT the user's workspace; using it as the project anchor
-  // collapsed every Pi session into a single phantom workspace. The
-  // dedicated resolver picks PI_WORKSPACE_DIR > PI_PROJECT_DIR > PWD > cwd
-  // and refuses to return any path under ~/.pi/.
-  const projectDir = resolvePiWorkspaceDir({
+  let mcpBridge: BridgeHandle | null = null;
+  let mcpBridgeReady: Promise<void> = Promise.resolve();
+  let sessionId = "";
+  let pendingCompactLabel = false;
+  let pendingContext = "";
+  let projectDir = resolvePiWorkspaceDir({
     env: process.env,
     pwd: process.env.PWD,
     cwd: process.cwd(),
   });
+  let attribution: Partial<ProjectAttribution> = {
+    projectDir,
+    source: "workspace_root",
+    confidence: 0.98,
+  };
+  let db: SessionDB | null = null;
 
-  // Attribution object for project isolation — ensures every event recorded
-  // by the pi adapter carries the correct project_dir. Without this, all
-  // events default to project_dir="" which causes cross-project data leakage
-  // in shared SessionDB instances.
-  const _attribution: Partial<ProjectAttribution> = { projectDir, source: "workspace_root", confidence: 0.98 };
+  const resetBridge = (): void => {
+    mcpBridgeGeneration++;
+    mcpBridgeStarted = false;
+    try { mcpBridge?.shutdown(); } catch { /* best effort */ }
+    mcpBridge = null;
+    mcpBridgeReady = Promise.resolve();
+    _mcpBridgeReady = mcpBridgeReady;
+  };
 
-  const db = getOrCreateDB(projectDir);
+  const workspaceKey = (value: string): string => {
+    const normalized = resolve(value);
+    return process.platform === "win32" ? normalized.toLowerCase() : normalized;
+  };
+
+  const bindWorkspace = (cwd: string | undefined): SessionDB => {
+    const nextProjectDir = resolvePiWorkspaceDir({
+      env: { ...process.env, PI_WORKSPACE_DIR: cwd },
+      pwd: process.env.PWD,
+      cwd: cwd ?? process.cwd(),
+    });
+    const workspaceChanged = workspaceKey(nextProjectDir) !== workspaceKey(projectDir);
+    if (db && !workspaceChanged) return db;
+
+    if (workspaceChanged) resetBridge();
+    try { db?.close(); } catch { /* best effort */ }
+    projectDir = nextProjectDir;
+    attribution = { projectDir, source: "workspace_root", confidence: 0.98 };
+    db = new SessionDB({ dbPath: getDBPath(projectDir) });
+    return db;
+  };
+
+  const ensureMCPBridge = (foreground: boolean): Promise<void> => {
+    if (mcpBridgeStarted) return mcpBridgeReady;
+    mcpBridgeStarted = true;
+    const generation = ++mcpBridgeGeneration;
+    mcpBridgeReady = startPiMCPBridge(
+      pi,
+      serverBundle,
+      () => mcpBridgeStarted && mcpBridgeGeneration === generation,
+      foreground,
+      projectDir,
+      (handle) => { mcpBridge = handle; },
+    );
+    _mcpBridgeReady = mcpBridgeReady;
+    return mcpBridgeReady;
+  };
 
   // ── 1. session_start — Initialize session ──────────────
 
   pi.on("session_start", (_event: any, ctx: any) => {
     try {
-      _sessionId = deriveSessionId(ctx ?? {});
-      db.ensureSession(_sessionId, projectDir);
-      db.cleanupOldSessions(7);
+      const activeDb = bindWorkspace(ctx?.cwd);
+      sessionId = deriveSessionId(ctx ?? {});
+      activeDb.ensureSession(sessionId, projectDir);
+      activeDb.cleanupOldSessions(7);
     } catch {
       // best effort — never break session start
-      if (!_sessionId) {
-        _sessionId = `pi-${Date.now()}`;
-      }
+      if (!sessionId) sessionId = `pi-${Date.now()}`;
     }
   });
 
@@ -536,7 +535,7 @@ export default function piExtension(pi: any): void {
 
   pi.on("tool_result", (event: any) => {
     try {
-      if (!_sessionId) return;
+      if (!sessionId || !db) return;
 
       const rawToolName = String(event?.toolName ?? event?.tool_name ?? "");
       let mappedToolName =
@@ -579,7 +578,7 @@ export default function piExtension(pi: any): void {
 
       if (events.length > 0) {
         for (const ev of events) {
-          db.insertEvent(_sessionId, ev as SessionEvent, "PostToolUse", _attribution);
+          db.insertEvent(sessionId, ev as SessionEvent, "PostToolUse", attribution);
         }
       } else if (rawToolName) {
         // Fallback: record unrecognized tool call as generic event
@@ -588,7 +587,7 @@ export default function piExtension(pi: any): void {
           params: event?.params ?? event?.input,
         });
         db.insertEvent(
-          _sessionId,
+          sessionId,
           {
             type: "tool_call",
             category: "pi",
@@ -599,7 +598,7 @@ export default function piExtension(pi: any): void {
               .digest("hex")
               .slice(0, 16),
           },
-          "PostToolUse", _attribution,
+          "PostToolUse", attribution,
         );
       }
     } catch {
@@ -611,14 +610,17 @@ export default function piExtension(pi: any): void {
 
   pi.on("before_agent_start", async (event: any, ctx: any) => {
     try {
-      _pendingContext = ""; // Reset — will be filled below if events exist
+      const activeDb = bindWorkspace(event?.systemPromptOptions?.cwd ?? ctx?.cwd);
+      if (!sessionId) sessionId = deriveSessionId(ctx ?? {});
+      activeDb.ensureSession(sessionId, projectDir);
+      pendingContext = ""; // Reset — will be filled below if events exist
       // Consume any pending real-compaction label FIRST (fail-safe: even if
       // this turn injects nothing, the flag can never leak into a later,
       // unrelated turn and produce a false "compaction" signal).
-      const injectSource: "compaction" | "active_memory" = _pendingCompactLabel
+      const injectSource: "compaction" | "active_memory" = pendingCompactLabel
         ? "compaction"
         : "active_memory";
-      _pendingCompactLabel = false;
+      pendingCompactLabel = false;
       // Lazily start and await the MCP bridge only when Pi is about to
       // dispatch a real agent turn. This is the non-brittle #534/#809 guard:
       // help/version/package/config CLI paths may load the extension, but they
@@ -646,7 +648,7 @@ export default function piExtension(pi: any): void {
       // interactive-mode.ts uiContext wiring, executor.ts subagent hasUI:false.)
       await ensureMCPBridge(isForegroundSession(ctx));
 
-      if (!_sessionId) return;
+      if (!sessionId) return;
 
       const prompt = String(event?.prompt ?? "");
 
@@ -654,7 +656,7 @@ export default function piExtension(pi: any): void {
       if (prompt) {
         const userEvents = extractUserEvents(prompt);
         for (const ev of userEvents) {
-          db.insertEvent(_sessionId, ev as SessionEvent, "UserPromptSubmit", _attribution);
+          activeDb.insertEvent(sessionId, ev as SessionEvent, "UserPromptSubmit", attribution);
         }
       }
 
@@ -687,8 +689,8 @@ export default function piExtension(pi: any): void {
       // inescapable per-turn standing order. Role events stay in the DB and
       // remain queryable via ctx_search(source: "session-events"); intent,
       // skills, decisions, and the resume snapshot are unaffected.
-      const activeEvents = db
-        .getEvents(_sessionId, {
+      const activeEvents = activeDb
+        .getEvents(sessionId, {
           minPriority: 3,
           limit: 50,
         })
@@ -722,10 +724,10 @@ export default function piExtension(pi: any): void {
       }
 
       // Resume snapshot (only when present and unconsumed).
-      const resume = db.getResume(_sessionId);
+      const resume = activeDb.getResume(sessionId);
       if (resume && !resume.consumed && resume.snapshot) {
         parts.push(resume.snapshot);
-        db.markResumeConsumed(_sessionId);
+        activeDb.markResumeConsumed(sessionId);
       }
 
       // Store extra context (routing anchor, active_memory, resume, behavioralDirective)
@@ -736,12 +738,12 @@ export default function piExtension(pi: any): void {
       const baseLen = existingPrompt ? 1 : 0;
       if (parts.length > baseLen) {
         const extraParts = parts.slice(baseLen);
-        _pendingContext = extraParts.join("\n\n");
+        pendingContext = extraParts.join("\n\n");
       } else {
-        _pendingContext = "";
+        pendingContext = "";
       }
     } catch {
-      _pendingContext = ""; // Reset — ensure no stale data escapes
+      pendingContext = ""; // Reset — ensure no stale data escapes
       // best effort — never break agent start
     }
   });
@@ -752,9 +754,9 @@ export default function piExtension(pi: any): void {
   // prefix prompt cache for DeepSeek, Anthropic, and OpenAI.
   pi.on("context", (event: any) => {
     try {
-      if (!_pendingContext) return;
-      const ctx = _pendingContext;
-      _pendingContext = "";
+      if (!pendingContext) return;
+      const ctx = pendingContext;
+      pendingContext = "";
       event.messages.push({
         role: "user",
         content: ctx,
@@ -772,7 +774,7 @@ export default function piExtension(pi: any): void {
 
   pi.on("before_provider_response", (event: any) => {
     try {
-      if (!_sessionId) return;
+      if (!sessionId || !db) return;
       const meta = {
         model: event?.model ?? event?.providerModel,
         provider: event?.provider,
@@ -790,7 +792,7 @@ export default function piExtension(pi: any): void {
       }
       const data = JSON.stringify(meta);
       db.insertEvent(
-        _sessionId,
+        sessionId,
         {
           type: "provider_response",
           category: "pi",
@@ -798,7 +800,7 @@ export default function piExtension(pi: any): void {
           priority: 1,
           data_hash: createHash("sha256").update(data).digest("hex").slice(0, 16),
         },
-        "PostToolUse", _attribution,
+        "PostToolUse", attribution,
       );
     } catch {
       // best effort — never break provider response
@@ -821,7 +823,7 @@ export default function piExtension(pi: any): void {
   // forwarder must never break the agent turn).
   pi.on("turn_end", (event: any) => {
     try {
-      if (!_sessionId) return;
+      if (!sessionId || !db) return;
       const counts = parsePiUsage(event);
       if (!counts) return; // non-assistant turn or all-zero usage
       const ev = buildAgentUsageEvent(counts);
@@ -829,7 +831,7 @@ export default function piExtension(pi: any): void {
       // db.insertEvent is the extension-side analog of the .mjs hooks'
       // attributeAndInsertEvents (insert + project attribution). The MCP
       // server forwards persisted agent_usage events to the platform.
-      db.insertEvent(_sessionId, ev as SessionEvent, "Stop", _attribution);
+      db.insertEvent(sessionId, ev as SessionEvent, "Stop", attribution);
     } catch {
       // best effort — never break the agent turn
     }
@@ -839,17 +841,17 @@ export default function piExtension(pi: any): void {
 
   pi.on("session_before_compact", () => {
     try {
-      if (!_sessionId) return;
+      if (!sessionId || !db) return;
 
-      const allEvents = db.getEvents(_sessionId);
+      const allEvents = db.getEvents(sessionId);
       if (allEvents.length === 0) return;
 
-      const stats = db.getSessionStats(_sessionId);
+      const stats = db.getSessionStats(sessionId);
       const snapshot = buildResumeSnapshot(allEvents, {
         compactCount: (stats?.compact_count ?? 0) + 1,
       });
 
-      db.upsertResume(_sessionId, snapshot, allEvents.length);
+      db.upsertResume(sessionId, snapshot, allEvents.length);
     } catch {
       // best effort — never break compaction
     }
@@ -859,9 +861,9 @@ export default function piExtension(pi: any): void {
 
   pi.on("session_compact", () => {
     try {
-      if (!_sessionId) return;
-      db.incrementCompactCount(_sessionId);
-      _pendingCompactLabel = true;
+      if (!sessionId || !db) return;
+      db.incrementCompactCount(sessionId);
+      pendingCompactLabel = true;
     } catch {
       // best effort
     }
@@ -870,41 +872,31 @@ export default function piExtension(pi: any): void {
   // ── 7. session_shutdown — Cleanup old sessions ─────────
 
   pi.on("session_shutdown", async () => {
-    try {
-      for (const db of _dbSingletons.values()) {
-        try { db.cleanupOldSessions(7); } catch { /* ignore */ }
-      }
-      _dbSingletons.clear();
-      _sessionId = "";
-      _pendingCompactLabel = false;
-    } catch {
-      // best effort — never throw during shutdown
-    }
-    // Race fix (#472 round-3 + #809 lazy follow-up): if shutdown fires while
-    // bridge bootstrap is still in flight, _mcpBridge may be null at this
-    // point. Invalidate this bootstrap generation before waiting so any handle
-    // that resolves after the 2s ceiling self-shuts down instead of publishing
-    // a stale child handle after session shutdown.
+    try { db?.cleanupOldSessions(7); } catch { /* best effort */ }
+    try { db?.close(); } catch { /* best effort */ }
+    db = null;
+    sessionId = "";
+    pendingCompactLabel = false;
+    pendingContext = "";
+    // Detach this session's bridge before waiting. A late bootstrap sees the
+    // invalidated generation and self-shuts down; a new session can publish its
+    // own handle without the old shutdown racing in and killing it.
+    const retiringBridge = mcpBridge;
+    const retiringReady = mcpBridgeReady;
     mcpBridgeGeneration++;
     mcpBridgeStarted = false;
+    mcpBridge = null;
+    mcpBridgeReady = Promise.resolve();
+    _mcpBridgeReady = mcpBridgeReady;
     try {
       await Promise.race([
-        _mcpBridgeReady,
+        retiringReady,
         new Promise<void>((r) => setTimeout(r, 2000).unref()),
       ]);
+      await retiringBridge?.shutdown();
     } catch {
-      // _mcpBridgeReady never rejects (best-effort), but defensively
-      // swallow anyway so shutdown never throws.
+      // Best effort — shutdown must never throw.
     }
-    if (_mcpBridge) {
-      try {
-        _mcpBridge.shutdown();
-      } catch {
-        // best effort — never throw during shutdown
-      }
-      _mcpBridge = null;
-    }
-    _mcpBridgeReady = Promise.resolve();
   });
 
   // ── 8. Slash commands ──────────────────────────────────
@@ -913,12 +905,10 @@ export default function piExtension(pi: any): void {
     description: "Show context-mode session statistics",
     handler: async (argsOrCtx: unknown, maybeCtx: unknown) => {
       const ctx = resolveCommandContext(argsOrCtx, maybeCtx);
-      const dbPath = getDBPath(projectDir);
-      const db = _dbSingletons.get(dbPath);
       const text =
-        !db || !_sessionId
+        !db || !sessionId
           ? "context-mode: no active session"
-          : buildStatsText(db, _sessionId);
+          : buildStatsText(db, sessionId);
 
       return handleCommandText(text, ctx);
     },
@@ -935,19 +925,18 @@ export default function piExtension(pi: any): void {
         "",
         `- DB path: \`${dbPath}\``,
         `- DB exists: ${dbExists}`,
-        `- Session ID: \`${_sessionId ? _sessionId.slice(0, 8) + "..." : "none"}\``,
+        `- Session ID: \`${sessionId ? sessionId.slice(0, 8) + "..." : "none"}\``,
         `- Plugin root: \`${pluginRoot}\``,
         `- Project dir: \`${projectDir}\``,
       ];
 
-      const db = _dbSingletons.get(dbPath);
-      if (db && _sessionId) {
+      if (db && sessionId) {
         try {
-          const stats = db.getSessionStats(_sessionId);
-          const eventCount = db.getEventCount(_sessionId);
+          const stats = db.getSessionStats(sessionId);
+          const eventCount = db.getEventCount(sessionId);
           lines.push(`- Events: ${eventCount}`);
           lines.push(`- Compactions: ${stats?.compact_count ?? 0}`);
-          const resume = db.getResume(_sessionId);
+          const resume = db.getResume(sessionId);
           lines.push(
             `- Resume snapshot: ${resume ? (resume.consumed ? "consumed" : "available") : "none"}`,
           );
@@ -967,5 +956,5 @@ export default function piExtension(pi: any): void {
   // lifecycle signal that proves Pi is about to run a model call; starting the
   // bridge there keeps ctx_* available for real agent turns while package/help
   // commands that only load extensions never spawn a long-lived child (#809).
-  _mcpBridgeReady = Promise.resolve();
+  _mcpBridgeReady = mcpBridgeReady;
 }

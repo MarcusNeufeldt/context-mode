@@ -48,6 +48,7 @@ function createMockPiApi() {
     registerTool: vi.fn(),
     sendMessage: vi.fn(),
     exec: vi.fn(),
+    logger: { debug: vi.fn(), warn: vi.fn(), error: vi.fn() },
 
     // ── Test helpers ──
     _trigger: async (event: string, ...args: any[]) => {
@@ -89,6 +90,7 @@ async function registerPiExtension(
 
 describe("Pi Extension", () => {
   beforeEach(() => {
+    delete process.env.PI_SUBAGENT_CHILD;
     tempDir = mkdtempSync(join(tmpdir(), "pi-ext-test-"));
     mkdirSync(tempDir, { recursive: true });
     api = createMockPiApi();
@@ -1394,7 +1396,7 @@ describe("Pi MCP bridge (#426)", () => {
     it("before_agent_start bootstraps and registers ctx_* via pi.registerTool", async () => {
       const wireApi = createMockPiApi();
       // PI_PROJECT_DIR / CLAUDE_PROJECT_DIR set inside registerPiExtension.
-      await registerPiExtension(wireApi, { projectDir: tempDir });
+      await registerPiExtension(wireApi, { projectDir: mcpScratch });
 
       // Lazy bootstrap: no tool should be registered during extension discovery.
       expect((wireApi.registerTool as any).mock.calls.length).toBe(0);
@@ -1412,7 +1414,7 @@ describe("Pi MCP bridge (#426)", () => {
       // Same canonical pin as the bridge integration test — but reached
       // through the Pi lifecycle hook instead of bootstrapMCPTools directly,
       // so dropping the wiring fails even when the bridge module still works.
-      expect(registeredNames).toEqual(
+      expect(registeredNames, JSON.stringify({ warn: wireApi.logger.warn.mock.calls, debug: wireApi.logger.debug.mock.calls })).toEqual(
         expect.arrayContaining([
           "ctx_execute",
           "ctx_search",
@@ -1448,7 +1450,7 @@ describe("Pi MCP bridge (#426)", () => {
     // reason — bridge happened to win the race).
     it("before_agent_start awaits MCP bridge bootstrap so ctx_* are registered before LLM call", async () => {
       const wireApi = createMockPiApi();
-      await registerPiExtension(wireApi, { projectDir: tempDir });
+      await registerPiExtension(wireApi, { projectDir: mcpScratch });
 
       // Establish a session so before_agent_start does real work
       // (the handler early-returns when `!_sessionId`).
@@ -1474,7 +1476,7 @@ describe("Pi MCP bridge (#426)", () => {
 
       const calls = (wireApi.registerTool as any).mock.calls as Array<[any]>;
       const registeredNames = calls.map(([t]) => t?.name).filter(Boolean);
-      expect(registeredNames).toEqual(
+      expect(registeredNames, JSON.stringify({ warn: wireApi.logger.warn.mock.calls, debug: wireApi.logger.debug.mock.calls })).toEqual(
         expect.arrayContaining([
           "ctx_execute",
           "ctx_search",

@@ -204,5 +204,36 @@ context-mode while parent Pi sessions continue loading it normally.
 Apply the existing bounded SQLite retry policy to database open/WAL setup,
 idempotent schema creation, and statement preparation. Use an 8-second driver
 busy timeout inside the four-attempt retry envelope so a contended Pi Hub event
-loop cannot block for roughly two minutes. Close failed pre-initialization
-connections before retrying to avoid leaking handles on Windows.
+loop cannot block for roughly two minutes. Close failed pre-initialization and
+exhausted schema/statement connections to avoid leaking handles on Windows.
+
+## D-022: Bind Pi runtime state to each session workspace
+
+- Date: 2026-08-18
+- Status: accepted
+
+Use Pi's documented `ctx.cwd` / `systemPromptOptions.cwd` as the authoritative
+workspace. Keep session, pending-context, DB, and bridge state inside each
+extension registration, and spawn the MCP child with that workspace as both its
+cwd and `CONTEXT_MODE_PROJECT_DIR`. Never derive a Pi Hub session workspace
+from the long-lived host process cwd.
+
+## D-023: Never delete content DB files from mtime heuristics
+
+- Date: 2026-08-18
+- Status: accepted
+
+Do not automatically unlink content DB/WAL/SHM files during server startup.
+SQLite main-file and WAL mtimes do not prove cross-process liveness, so the old
+one-hour heuristic could delete an active-but-idle session. Keep deletion behind
+explicit `ctx_purge` / `ctx_forget` operations until positive liveness proof and
+coordination exist.
+
+## D-024: Import upstream #1056
+
+- Date: 2026-08-18
+- Status: accepted
+
+Import #1056 with provenance. Remove per-close shared-WAL TRUNCATE and make mmap
+opt-in so Windows sibling processes cannot wedge live DB handles. Retain #988's
+PASSIVE timer and #1030's transient IOERR retry as complementary protections.

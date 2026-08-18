@@ -33,6 +33,14 @@ function createStore(): ContentStore {
 }
 
 describe("Schema & Lifecycle", () => {
+  test("server startup never deletes content DB files from mtime/WAL heuristics (#1024)", () => {
+    const serverSource = readFileSync(join(__dirname, "..", "src", "server.ts"), "utf8");
+    const storeSource = readFileSync(join(__dirname, "..", "src", "store.ts"), "utf8");
+
+    expect(serverSource).not.toContain("cleanupStaleContentDBs");
+    expect(storeSource).not.toContain("function cleanupStaleContentDBs");
+  });
+
   test("creates store with empty stats", () => {
     const store = createStore();
     const stats = store.getStats();
